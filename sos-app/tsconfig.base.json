@@ -1,0 +1,39 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sos-app/shared": ["libs/shared/src/index.ts"],
+      "@sos-app/shared/*": ["libs/shared/src/*"],
+      "@sos-app/ui-components": ["libs/ui-components/src/index.ts"],
+      "@sos-app/ui-components/*": ["libs/ui-components/src/*"],
+      "@sos-app/api-client": ["libs/api-client/src/index.ts"],
+      "@sos-app/api-client/*": ["libs/api-client/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "tmp", "dist", "build"]
+}

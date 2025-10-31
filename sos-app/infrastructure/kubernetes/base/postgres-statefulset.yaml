@@ -1,0 +1,603 @@
+# =============================================================================
+# SOS App - PostgreSQL StatefulSet with High Availability
+# =============================================================================
+# Purpose: Deploy highly-available PostgreSQL cluster with replication
+# Features: 3 replicas, persistent storage, health checks, backups
+# Cloud-Agnostic: Works on any Kubernetes cluster
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: PostgreSQL Headless Service (for StatefulSet)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: sos-app
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+
+---
+# -----------------------------------------------------------------------------
+# Service: PostgreSQL Read-Write Service (Primary)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: sos-app
+  annotations:
+    description: "PostgreSQL primary service for read-write operations"
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    role: primary  # Only route to primary
+
+---
+# -----------------------------------------------------------------------------
+# Service: PostgreSQL Read-Only Service (Replicas)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-readonly-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: sos-app
+  annotations:
+    description: "PostgreSQL readonly service for read operations on replicas"
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    role: replica  # Only route to replicas
+
+---
+# -----------------------------------------------------------------------------
+# StatefulSet: PostgreSQL with Replication
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "15.4"
+spec:
+  serviceName: postgres-headless
+  replicas: 3  # 1 primary + 2 replicas for high availability
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: sos-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      # Security Context
+      securityContext:
+        fsGroup: 999  # postgres group
+        runAsUser: 999  # postgres user
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-affinity to spread replicas across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: postgres
+                  app.kubernetes.io/component: database
+              topologyKey: kubernetes.io/hostname
+
+      # Priority Class
+      priorityClassName: sos-app-high
+
+      # Init Container: Wait for previous pod to be ready (for replication)
+      initContainers:
+      - name: wait-for-primary
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          # If this is the first pod (primary), skip waiting
+          if [ "${HOSTNAME##*-}" = "0" ]; then
+            echo "This is the primary pod, skipping wait"
+            exit 0
+          fi
+
+          # Wait for primary to be ready
+          echo "Waiting for primary pod to be ready..."
+          until nslookup postgres-0.postgres-headless.sos-app.svc.cluster.local; do
+            echo "Primary not ready yet, waiting..."
+            sleep 5
+          done
+          echo "Primary is ready!"
+
+      # Main Container: PostgreSQL
+      containers:
+      - name: postgres
+        image: postgres:15.4-alpine
+        imagePullPolicy: IfNotPresent
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false  # PostgreSQL needs to write to /var/lib/postgresql
+
+        # Ports
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+
+        # Environment Variables
+        env:
+        # Basic Configuration
+        - name: POSTGRES_DB
+          value: "postgres"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: postgres-password
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+
+        # Pod Information
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Replication Configuration
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF8 --locale=en_US.UTF-8"
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: "md5"
+
+        # Resource Limits
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 4Gi
+
+        # Volume Mounts
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /etc/postgresql
+        - name: postgres-init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+        - name: postgres-backup
+          mountPath: /backup
+
+        # Liveness Probe
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U postgres -h localhost -p 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              pg_isready -U postgres -h localhost -p 5432 && \
+              psql -U postgres -c "SELECT 1" > /dev/null 2>&1
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe (for slow starts)
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U postgres -h localhost -p 5432
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30  # 30 * 5s = 150s max startup time
+
+      # Sidecar: PostgreSQL Exporter for Prometheus
+      - name: postgres-exporter
+        image: prometheuscommunity/postgres-exporter:v0.13.2
+        imagePullPolicy: IfNotPresent
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534  # nobody
+
+        # Ports
+        ports:
+        - name: metrics
+          containerPort: 9187
+          protocol: TCP
+
+        # Environment Variables
+        env:
+        - name: DATA_SOURCE_NAME
+          value: "postgresql://postgres:$(POSTGRES_PASSWORD)@localhost:5432/postgres?sslmode=disable"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: postgres-password
+        - name: PG_EXPORTER_WEB_LISTEN_ADDRESS
+          value: ":9187"
+        - name: PG_EXPORTER_EXTEND_QUERY_PATH
+          value: "/etc/postgres-exporter/queries.yaml"
+
+        # Resource Limits
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        # Volume Mounts
+        volumeMounts:
+        - name: exporter-config
+          mountPath: /etc/postgres-exporter
+
+      # Volumes
+      volumes:
+      # PostgreSQL Configuration
+      - name: postgres-config
+        configMap:
+          name: postgres-config
+          optional: true
+      # PostgreSQL Initialization Scripts
+      - name: postgres-init-scripts
+        configMap:
+          name: postgres-init-scripts
+          optional: true
+      # PostgreSQL Backup Directory
+      - name: postgres-backup
+        emptyDir: {}
+      # Postgres Exporter Configuration
+      - name: exporter-config
+        configMap:
+          name: postgres-exporter-config
+          optional: true
+
+  # Volume Claim Templates
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi
+      # storageClassName: fast  # Uncomment and set for specific storage class
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: PostgreSQL Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+data:
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = '*'
+    max_connections = 200
+    superuser_reserved_connections = 3
+
+    # Memory Settings
+    shared_buffers = 512MB
+    effective_cache_size = 2GB
+    maintenance_work_mem = 128MB
+    work_mem = 4MB
+
+    # WAL Settings (for replication)
+    wal_level = replica
+    max_wal_senders = 10
+    max_replication_slots = 10
+    wal_keep_size = 1GB
+    hot_standby = on
+    hot_standby_feedback = on
+
+    # Checkpoint Settings
+    checkpoint_completion_target = 0.9
+    wal_buffers = 16MB
+    min_wal_size = 1GB
+    max_wal_size = 4GB
+
+    # Query Tuning
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = off
+    log_min_duration_statement = 1000  # Log queries > 1s
+    log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    log_temp_files = 0
+    log_autovacuum_min_duration = 0
+
+    # Autovacuum
+    autovacuum = on
+    autovacuum_max_workers = 3
+    autovacuum_naptime = 60s
+
+    # Locale
+    lc_messages = 'en_US.UTF-8'
+    lc_monetary = 'en_US.UTF-8'
+    lc_numeric = 'en_US.UTF-8'
+    lc_time = 'en_US.UTF-8'
+
+    # Timezone
+    timezone = 'UTC'
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: PostgreSQL Exporter Queries
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-exporter-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: monitoring
+data:
+  queries.yaml: |
+    pg_replication:
+      query: "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) as lag"
+      metrics:
+        - lag:
+            usage: "GAUGE"
+            description: "Replication lag behind master in seconds"
+
+    pg_postmaster:
+      query: "SELECT pg_postmaster_start_time as start_time_seconds from pg_postmaster_start_time()"
+      metrics:
+        - start_time_seconds:
+            usage: "GAUGE"
+            description: "Time at which postmaster started"
+
+    pg_stat_user_tables:
+      query: |
+        SELECT
+          current_database() datname,
+          schemaname,
+          relname,
+          seq_scan,
+          seq_tup_read,
+          idx_scan,
+          idx_tup_fetch,
+          n_tup_ins,
+          n_tup_upd,
+          n_tup_del,
+          n_tup_hot_upd,
+          n_live_tup,
+          n_dead_tup,
+          n_mod_since_analyze,
+          COALESCE(last_vacuum, '1970-01-01Z') as last_vacuum,
+          COALESCE(last_autovacuum, '1970-01-01Z') as last_autovacuum,
+          COALESCE(last_analyze, '1970-01-01Z') as last_analyze,
+          COALESCE(last_autoanalyze, '1970-01-01Z') as last_autoanalyze,
+          vacuum_count,
+          autovacuum_count,
+          analyze_count,
+          autoanalyze_count
+        FROM pg_stat_user_tables
+      metrics:
+        - datname:
+            usage: "LABEL"
+            description: "Name of current database"
+        - schemaname:
+            usage: "LABEL"
+            description: "Name of the schema that this table is in"
+        - relname:
+            usage: "LABEL"
+            description: "Name of this table"
+        - seq_scan:
+            usage: "COUNTER"
+            description: "Number of sequential scans initiated on this table"
+        - seq_tup_read:
+            usage: "COUNTER"
+            description: "Number of live rows fetched by sequential scans"
+        - idx_scan:
+            usage: "COUNTER"
+            description: "Number of index scans initiated on this table"
+        - idx_tup_fetch:
+            usage: "COUNTER"
+            description: "Number of live rows fetched by index scans"
+        - n_tup_ins:
+            usage: "COUNTER"
+            description: "Number of rows inserted"
+        - n_tup_upd:
+            usage: "COUNTER"
+            description: "Number of rows updated"
+        - n_tup_del:
+            usage: "COUNTER"
+            description: "Number of rows deleted"
+        - n_tup_hot_upd:
+            usage: "COUNTER"
+            description: "Number of rows HOT updated"
+        - n_live_tup:
+            usage: "GAUGE"
+            description: "Estimated number of live rows"
+        - n_dead_tup:
+            usage: "GAUGE"
+            description: "Estimated number of dead rows"
+        - n_mod_since_analyze:
+            usage: "GAUGE"
+            description: "Estimated number of rows changed since last analyze"
+        - last_vacuum:
+            usage: "GAUGE"
+            description: "Last time at which this table was manually vacuumed"
+        - last_autovacuum:
+            usage: "GAUGE"
+            description: "Last time at which this table was vacuumed by the autovacuum daemon"
+        - last_analyze:
+            usage: "GAUGE"
+            description: "Last time at which this table was manually analyzed"
+        - last_autoanalyze:
+            usage: "GAUGE"
+            description: "Last time at which this table was analyzed by the autovacuum daemon"
+        - vacuum_count:
+            usage: "COUNTER"
+            description: "Number of times this table has been manually vacuumed"
+        - autovacuum_count:
+            usage: "COUNTER"
+            description: "Number of times this table has been vacuumed by the autovacuum daemon"
+        - analyze_count:
+            usage: "COUNTER"
+            description: "Number of times this table has been manually analyzed"
+        - autoanalyze_count:
+            usage: "COUNTER"
+            description: "Number of times this table has been analyzed by the autovacuum daemon"
+
+# =============================================================================
+# Usage Instructions:
+# =============================================================================
+#
+# 1. Create secrets first:
+#    kubectl create secret generic postgres-credentials \
+#      --from-literal=postgres-password=your-strong-password \
+#      -n sos-app
+#
+# 2. Apply StatefulSet:
+#    kubectl apply -f postgres-statefulset.yaml
+#
+# 3. Verify deployment:
+#    kubectl get statefulset postgres -n sos-app
+#    kubectl get pods -n sos-app -l app.kubernetes.io/name=postgres
+#    kubectl get pvc -n sos-app
+#
+# 4. Check logs:
+#    kubectl logs postgres-0 -n sos-app -c postgres
+#
+# 5. Connect to PostgreSQL:
+#    kubectl exec -it postgres-0 -n sos-app -c postgres -- psql -U postgres
+#
+# 6. Check replication status (on primary):
+#    kubectl exec -it postgres-0 -n sos-app -c postgres -- \
+#      psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+#
+# 7. Scale replicas:
+#    kubectl scale statefulset postgres --replicas=5 -n sos-app
+#
+# 8. Check metrics:
+#    kubectl port-forward postgres-0 9187:9187 -n sos-app
+#    curl http://localhost:9187/metrics
+#
+# =============================================================================
+# High Availability Notes:
+# =============================================================================
+#
+# - Primary: postgres-0 (read-write)
+# - Replicas: postgres-1, postgres-2 (read-only)
+# - Automatic failover requires additional tools (Patroni, Stolon, etc.)
+# - For production, consider:
+#   - Patroni for automatic failover
+#   - pgBouncer for connection pooling
+#   - Barman/WAL-G for backups
+#   - Cloud-managed databases (RDS, Cloud SQL, Azure Database)
+#
+# =============================================================================

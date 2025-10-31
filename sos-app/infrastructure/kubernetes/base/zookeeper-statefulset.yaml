@@ -1,0 +1,508 @@
+# =============================================================================
+# SOS App - Zookeeper StatefulSet Configuration
+# =============================================================================
+# Purpose: Coordination service for Kafka (distributed consensus)
+# Features: 3-node ensemble, persistent storage, automatic leader election
+# Replicas: 3 (minimum for production fault tolerance)
+# Storage: 10Gi per replica (30Gi total)
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: Zookeeper Headless Service (for StatefulSet)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Headless service for Zookeeper StatefulSet - provides stable network IDs"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  publishNotReadyAddresses: true
+  ports:
+  - name: client
+    port: 2181
+    targetPort: 2181
+    protocol: TCP
+  - name: follower
+    port: 2888
+    targetPort: 2888
+    protocol: TCP
+  - name: election
+    port: 3888
+    targetPort: 3888
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+
+---
+# -----------------------------------------------------------------------------
+# Service: Zookeeper Client Service
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Zookeeper client service for Kafka coordination"
+spec:
+  type: ClusterIP
+  ports:
+  - name: client
+    port: 2181
+    targetPort: 2181
+    protocol: TCP
+  - name: metrics
+    port: 7000
+    targetPort: 7000
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Zookeeper Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+data:
+  # Zookeeper Configuration
+  zoo.cfg: |
+    # Basic Settings
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    dataDir=/data
+    dataLogDir=/datalog
+    clientPort=2181
+
+    # Ensemble Settings (3-node cluster)
+    server.1=zookeeper-0.zookeeper-headless.sos-app.svc.cluster.local:2888:3888
+    server.2=zookeeper-1.zookeeper-headless.sos-app.svc.cluster.local:2888:3888
+    server.3=zookeeper-2.zookeeper-headless.sos-app.svc.cluster.local:2888:3888
+
+    # Performance Tuning
+    maxClientCnxns=60
+    autopurge.snapRetainCount=3
+    autopurge.purgeInterval=24
+
+    # Advanced Settings
+    preAllocSize=65536
+    snapCount=100000
+
+    # 4-letter word commands (monitoring)
+    4lw.commands.whitelist=stat,ruok,conf,isro
+
+  # JVM Options
+  jvm.properties: |
+    -Xms512M
+    -Xmx512M
+    -XX:+UseG1GC
+    -XX:MaxGCPauseMillis=20
+    -XX:InitiatingHeapOccupancyPercent=35
+    -XX:+ExplicitGCInvokesConcurrent
+    -Djava.awt.headless=true
+    -Djava.net.preferIPv4Stack=true
+    -Dzookeeper.4lw.commands.whitelist=stat,ruok,conf,isro
+
+  # Logging Configuration
+  log4j.properties: |
+    zookeeper.root.logger=INFO, CONSOLE
+    zookeeper.console.threshold=INFO
+    zookeeper.log.dir=/var/log/zookeeper
+    zookeeper.log.file=zookeeper.log
+    log4j.rootLogger=${zookeeper.root.logger}
+    log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+    log4j.appender.CONSOLE.Threshold=${zookeeper.console.threshold}
+    log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+    log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n
+
+---
+# -----------------------------------------------------------------------------
+# StatefulSet: Zookeeper
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "3.8"
+  annotations:
+    description: "Zookeeper ensemble for Kafka coordination"
+spec:
+  serviceName: zookeeper-headless
+  replicas: 3  # 3-node ensemble (minimum for production)
+
+  # Pod Management Policy
+  podManagementPolicy: OrderedReady
+
+  # Update Strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
+  # Selector
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/component: coordination
+
+  # Pod Template
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zookeeper
+        app.kubernetes.io/component: coordination
+        app.kubernetes.io/part-of: sos-app
+        app.kubernetes.io/version: "3.8"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7000"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # Priority Class
+      priorityClassName: sos-app-high
+
+      # Service Account
+      serviceAccountName: default
+
+      # Security Context (Pod-level)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # zookeeper user
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-Affinity (spread pods across nodes)
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: zookeeper
+                app.kubernetes.io/component: coordination
+            topologyKey: kubernetes.io/hostname
+
+      # Init Containers
+      initContainers:
+      # Fix permissions and set myid
+      - name: init-zookeeper
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          # Fix permissions
+          chown -R 1000:1000 /data /datalog
+          chmod 700 /data /datalog
+
+          # Extract server ID from hostname (zookeeper-0 -> 1, zookeeper-1 -> 2, etc.)
+          SERVER_ID=$((${HOSTNAME##*-} + 1))
+          echo $SERVER_ID > /data/myid
+          echo "Zookeeper myid set to: $SERVER_ID"
+          cat /data/myid
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /data
+        - name: zookeeper-datalog
+          mountPath: /datalog
+        securityContext:
+          runAsUser: 0  # Need root to chown
+          runAsNonRoot: false
+
+      # Containers
+      containers:
+      # Zookeeper Container
+      - name: zookeeper
+        image: zookeeper:3.8
+        imagePullPolicy: IfNotPresent
+
+        # Environment Variables
+        env:
+        - name: ZOO_CFG_EXTRA
+          value: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7000"
+        - name: ZOO_MY_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ZOO_SERVERS
+          value: "server.1=zookeeper-0.zookeeper-headless.sos-app.svc.cluster.local:2888:3888 server.2=zookeeper-1.zookeeper-headless.sos-app.svc.cluster.local:2888:3888 server.3=zookeeper-2.zookeeper-headless.sos-app.svc.cluster.local:2888:3888"
+        - name: JVMFLAGS
+          value: "-Xms512M -Xmx512M -XX:+UseG1GC"
+
+        # Ports
+        ports:
+        - name: client
+          containerPort: 2181
+          protocol: TCP
+        - name: follower
+          containerPort: 2888
+          protocol: TCP
+        - name: election
+          containerPort: 3888
+          protocol: TCP
+        - name: metrics
+          containerPort: 7000
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+        # Liveness Probe
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - echo ruok | nc localhost 2181 | grep imok
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - echo ruok | nc localhost 2181 | grep imok
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe
+        startupProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - echo ruok | nc localhost 2181 | grep imok
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30  # 150 seconds total
+
+        # Volume Mounts
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /data
+        - name: zookeeper-datalog
+          mountPath: /datalog
+        - name: zookeeper-config
+          mountPath: /conf/zoo.cfg
+          subPath: zoo.cfg
+        - name: zookeeper-config
+          mountPath: /conf/log4j.properties
+          subPath: log4j.properties
+
+        # Security Context (Container-level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: zookeeper-config
+        configMap:
+          name: zookeeper-config
+      - name: zookeeper-datalog
+        emptyDir: {}
+
+  # Volume Claim Templates
+  volumeClaimTemplates:
+  - metadata:
+      name: zookeeper-data
+      labels:
+        app.kubernetes.io/name: zookeeper
+        app.kubernetes.io/component: coordination
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      # storageClassName: fast-ssd  # Uncomment and adjust for your cluster
+
+---
+# -----------------------------------------------------------------------------
+# PodDisruptionBudget: Ensure at least 2 replicas available (quorum)
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zookeeper-pdb
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: zookeeper
+    app.kubernetes.io/component: coordination
+spec:
+  minAvailable: 2  # Maintain quorum
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+      app.kubernetes.io/component: coordination
+
+# =============================================================================
+# Usage Instructions
+# =============================================================================
+#
+# 1. Apply this configuration:
+#    kubectl apply -f zookeeper-statefulset.yaml
+#
+# 2. Wait for all replicas to be ready:
+#    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=zookeeper -n sos-app --timeout=300s
+#
+# 3. Verify Zookeeper ensemble:
+#    kubectl exec -it zookeeper-0 -n sos-app -- zkCli.sh -server localhost:2181 ls /
+#
+# 4. Check ensemble status:
+#    for i in 0 1 2; do
+#      echo "Zookeeper-$i:"
+#      kubectl exec -it zookeeper-$i -n sos-app -- bash -c "echo stat | nc localhost 2181 | grep Mode"
+#    done
+#
+# 5. Connect to Zookeeper:
+#    # From Kafka or other services:
+#    zookeeper-0.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-1.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-2.zookeeper-headless.sos-app.svc.cluster.local:2181
+#
+#    # Or use service (load balanced):
+#    zookeeper-service:2181
+#
+# =============================================================================
+# Zookeeper Ensemble Architecture
+# =============================================================================
+#
+# 3-Node Ensemble:
+# ┌───────────┐       ┌───────────┐       ┌───────────┐
+# │Zookeeper-0│◄─────►│Zookeeper-1│◄─────►│Zookeeper-2│
+# │  (Leader) │       │ (Follower)│       │ (Follower)│
+# └─────┬─────┘       └─────┬─────┘       └─────┬─────┘
+#       │                   │                   │
+#       └───────────────────┴───────────────────┘
+#                           │
+#                     ┌─────▼─────┐
+#                     │   Kafka   │
+#                     │  Cluster  │
+#                     └───────────┘
+#
+# Quorum:
+# - Requires (N/2 + 1) nodes for consensus
+# - 3-node ensemble: requires 2 nodes minimum
+# - Can tolerate 1 node failure
+#
+# Leader Election:
+# - Automatic when ensemble starts
+# - Re-election if leader fails
+# - Takes ~5-10 seconds
+#
+# =============================================================================
+# Monitoring
+# =============================================================================
+#
+# Prometheus metrics available at:
+#   http://zookeeper-service:7000/metrics
+#
+# Key metrics:
+# - zookeeper_up - Zookeeper uptime
+# - zookeeper_server_state - Node state (leader/follower)
+# - zookeeper_outstanding_requests - Pending requests
+# - zookeeper_avg_latency - Average latency
+#
+# Four-letter commands (monitoring):
+#   echo stat | nc zookeeper-service 2181  # Server stats
+#   echo ruok | nc zookeeper-service 2181  # Health check (imok)
+#   echo conf | nc zookeeper-service 2181  # Configuration
+#   echo mntr | nc zookeeper-service 2181  # Metrics
+#
+# =============================================================================
+# Troubleshooting
+# =============================================================================
+#
+# Check myid:
+#   kubectl exec -it zookeeper-0 -n sos-app -- cat /data/myid
+#
+# Check logs:
+#   kubectl logs zookeeper-0 -n sos-app
+#
+# Check ensemble status:
+#   kubectl exec -it zookeeper-0 -n sos-app -- bash -c "echo stat | nc localhost 2181"
+#
+# Interactive shell:
+#   kubectl exec -it zookeeper-0 -n sos-app -- zkCli.sh
+#
+# List znodes:
+#   kubectl exec -it zookeeper-0 -n sos-app -- zkCli.sh -server localhost:2181 ls /
+#
+# =============================================================================
+# Backup and Recovery
+# =============================================================================
+#
+# Backup Zookeeper data:
+#   kubectl exec -it zookeeper-0 -n sos-app -- tar -czf /tmp/backup.tar.gz /data
+#   kubectl cp sos-app/zookeeper-0:/tmp/backup.tar.gz ./zookeeper-backup.tar.gz
+#
+# Restore:
+#   kubectl cp ./zookeeper-backup.tar.gz sos-app/zookeeper-0:/tmp/backup.tar.gz
+#   kubectl exec -it zookeeper-0 -n sos-app -- tar -xzf /tmp/backup.tar.gz -C /
+#
+# =============================================================================
+# Scaling
+# =============================================================================
+#
+# Zookeeper ensembles must have odd number of nodes (3, 5, 7)
+#
+# Scale to 5 nodes:
+#   1. Update replicas in this file to 5
+#   2. Add server.4 and server.5 to zoo.cfg in ConfigMap
+#   3. kubectl apply -f zookeeper-statefulset.yaml
+#
+# Note: Never scale below 3 nodes in production
+#
+# =============================================================================

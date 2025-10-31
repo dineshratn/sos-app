@@ -1,0 +1,422 @@
+# =============================================================================
+# SOS App - Kubernetes Namespace Configuration
+# =============================================================================
+# Purpose: Isolate SOS App resources in Kubernetes cluster
+# Features: Resource quotas, limits, labels for monitoring and environment
+# Cloud-Agnostic: Works on AWS EKS, GCP GKE, Azure AKS, or any K8s cluster
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Namespace Definition
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sos-app
+  labels:
+    # Application identification
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/part-of: sos-emergency-platform
+    app.kubernetes.io/managed-by: kubectl
+
+    # Environment classification
+    environment: production
+    tier: application
+
+    # Team and ownership
+    team: platform-engineering
+    cost-center: engineering
+
+    # Monitoring and observability
+    monitoring: enabled
+    logging: enabled
+    tracing: enabled
+
+    # Security and compliance
+    security-scan: enabled
+    hipaa-compliant: "true"
+    encryption-required: "true"
+
+    # Network policy
+    network-policy: enabled
+
+  annotations:
+    # Documentation
+    description: "SOS App emergency response platform - main application namespace"
+    documentation: "https://docs.sos-app.com/infrastructure/kubernetes"
+    owner-team: "platform-engineering@sos-app.com"
+    incident-contact: "oncall@sos-app.com"
+
+    # Cost tracking
+    cost-allocation: "production-workloads"
+    budget-alert: "enabled"
+
+    # Security
+    security.policy: "strict"
+    pod-security.kubernetes.io/enforce: "restricted"
+    pod-security.kubernetes.io/audit: "restricted"
+    pod-security.kubernetes.io/warn: "restricted"
+
+    # Backup and DR
+    backup-enabled: "true"
+    backup-schedule: "0 2 * * *"  # Daily at 2 AM
+    disaster-recovery-tier: "tier-1"
+
+    # Monitoring integration
+    prometheus.io/scrape: "true"
+    grafana.io/dashboard: "sos-app-overview"
+
+    # Change tracking
+    last-updated: "2025-10-29"
+    version: "1.0.0"
+
+---
+# -----------------------------------------------------------------------------
+# Resource Quota - Compute Resources
+# -----------------------------------------------------------------------------
+# Limits total compute resources that can be requested in the namespace
+# Prevents resource exhaustion and ensures fair cluster usage
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sos-app-compute-quota
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    quota-type: compute
+spec:
+  hard:
+    # CPU Limits (cores)
+    requests.cpu: "50"        # Total CPU requests across all pods
+    limits.cpu: "100"         # Total CPU limits across all pods
+
+    # Memory Limits (GB)
+    requests.memory: "100Gi"  # Total memory requests across all pods
+    limits.memory: "200Gi"    # Total memory limits across all pods
+
+    # Pod Limits
+    pods: "200"               # Maximum number of pods
+
+  # Scope to apply quota to specific pod priorities
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - high-priority
+      - medium-priority
+      - low-priority
+
+---
+# -----------------------------------------------------------------------------
+# Resource Quota - Storage Resources
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sos-app-storage-quota
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    quota-type: storage
+spec:
+  hard:
+    # Persistent Volume Claims
+    requests.storage: "1Ti"                           # Total storage requests
+    persistentvolumeclaims: "50"                      # Max PVCs
+
+    # Storage Class Specific Quotas (examples for common cloud providers)
+    # Adjust based on your actual storage classes
+    # AWS EKS: gp3, gp2, io1
+    # GCP GKE: standard, ssd, balanced
+    # Azure AKS: managed-premium, managed-standard
+
+    # Fast SSD storage (for databases)
+    requests.storage.fast: "500Gi"
+
+    # Standard storage (for general use)
+    requests.storage.standard: "500Gi"
+
+---
+# -----------------------------------------------------------------------------
+# Resource Quota - Object Count Limits
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sos-app-object-quota
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    quota-type: objects
+spec:
+  hard:
+    # Workload Resources
+    deployments.apps: "30"              # Max deployments
+    statefulsets.apps: "15"             # Max statefulsets
+    jobs.batch: "50"                    # Max jobs
+    cronjobs.batch: "20"                # Max cronjobs
+
+    # Service Resources
+    services: "50"                      # Max services
+    services.loadbalancers: "10"        # Max LoadBalancer services
+    services.nodeports: "5"             # Max NodePort services
+
+    # Configuration Resources
+    configmaps: "100"                   # Max ConfigMaps
+    secrets: "100"                      # Max Secrets
+
+    # Networking Resources
+    ingresses.networking.k8s.io: "20"   # Max Ingress resources
+
+---
+# -----------------------------------------------------------------------------
+# Limit Range - Default Resource Limits for Containers
+# -----------------------------------------------------------------------------
+# Sets default resource requests/limits if not specified in pod spec
+# Prevents pods from requesting excessive resources
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: sos-app-container-limits
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    limit-type: container
+spec:
+  limits:
+  # Container-level limits
+  - type: Container
+    # Default values if not specified in pod spec
+    default:
+      cpu: "500m"           # Default CPU limit
+      memory: "512Mi"       # Default memory limit
+    defaultRequest:
+      cpu: "100m"           # Default CPU request
+      memory: "128Mi"       # Default memory request
+    # Maximum values that can be requested
+    max:
+      cpu: "4"              # Max CPU per container
+      memory: "8Gi"         # Max memory per container
+    # Minimum values that must be requested
+    min:
+      cpu: "10m"            # Min CPU per container
+      memory: "32Mi"        # Min memory per container
+    # Maximum ratio between limit and request
+    maxLimitRequestRatio:
+      cpu: "10"             # Limit can be max 10x the request
+      memory: "4"           # Limit can be max 4x the request
+
+  # Pod-level limits (aggregate of all containers)
+  - type: Pod
+    max:
+      cpu: "16"             # Max CPU per pod (all containers combined)
+      memory: "32Gi"        # Max memory per pod
+    min:
+      cpu: "10m"            # Min CPU per pod
+      memory: "32Mi"        # Min memory per pod
+
+  # PersistentVolumeClaim limits
+  - type: PersistentVolumeClaim
+    max:
+      storage: "100Gi"      # Max storage per PVC
+    min:
+      storage: "1Gi"        # Min storage per PVC
+
+---
+# -----------------------------------------------------------------------------
+# Network Policy - Default Deny All (Optional but Recommended)
+# -----------------------------------------------------------------------------
+# Deny all ingress and egress traffic by default
+# Specific services should define their own NetworkPolicies to allow traffic
+# Uncomment if you want zero-trust networking
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sos-app-default-deny-all
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    policy-type: default-deny
+  annotations:
+    description: "Default deny all traffic - services must explicitly allow"
+spec:
+  podSelector: {}  # Applies to all pods in namespace
+  policyTypes:
+  - Ingress
+  - Egress
+  # Empty ingress/egress rules = deny all
+  # Services will need to create their own NetworkPolicies
+
+---
+# -----------------------------------------------------------------------------
+# Network Policy - Allow DNS (Required for Service Discovery)
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sos-app-allow-dns
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    policy-type: allow-dns
+spec:
+  podSelector: {}  # Applies to all pods
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS queries to kube-dns/CoreDNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# -----------------------------------------------------------------------------
+# Network Policy - Allow Internal Communication
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sos-app-allow-internal
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    policy-type: allow-internal
+spec:
+  podSelector: {}  # Applies to all pods
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from same namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          app.kubernetes.io/name: sos-app
+  egress:
+  # Allow traffic to same namespace
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          app.kubernetes.io/name: sos-app
+
+---
+# -----------------------------------------------------------------------------
+# Priority Classes for Pod Scheduling
+# -----------------------------------------------------------------------------
+# Critical services (emergency alerts, location tracking)
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sos-app-critical
+  labels:
+    app.kubernetes.io/name: sos-app
+value: 1000000
+globalDefault: false
+description: "Critical SOS App services (emergency, location)"
+preemptionPolicy: PreemptLowerPriority
+
+---
+# High priority services (auth, user, notifications)
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sos-app-high
+  labels:
+    app.kubernetes.io/name: sos-app
+value: 10000
+globalDefault: false
+description: "High priority SOS App services"
+preemptionPolicy: PreemptLowerPriority
+
+---
+# Medium priority services (medical, devices)
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sos-app-medium
+  labels:
+    app.kubernetes.io/name: sos-app
+value: 1000
+globalDefault: true  # Default for sos-app namespace
+description: "Medium priority SOS App services"
+preemptionPolicy: PreemptLowerPriority
+
+---
+# Low priority services (analytics, reporting, batch jobs)
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: sos-app-low
+  labels:
+    app.kubernetes.io/name: sos-app
+value: 100
+globalDefault: false
+description: "Low priority SOS App services"
+preemptionPolicy: Never
+
+# =============================================================================
+# Usage Instructions:
+# =============================================================================
+#
+# Apply this configuration:
+#   kubectl apply -f infrastructure/kubernetes/base/namespace.yaml
+#
+# Verify namespace:
+#   kubectl get namespace sos-app
+#   kubectl describe namespace sos-app
+#
+# Check resource quotas:
+#   kubectl get resourcequota -n sos-app
+#   kubectl describe resourcequota -n sos-app
+#
+# Check limit ranges:
+#   kubectl get limitrange -n sos-app
+#   kubectl describe limitrange -n sos-app
+#
+# Check network policies:
+#   kubectl get networkpolicy -n sos-app
+#
+# Check priority classes:
+#   kubectl get priorityclass | grep sos-app
+#
+# View resource usage:
+#   kubectl top pods -n sos-app
+#   kubectl top nodes
+#
+# =============================================================================
+# Cloud Provider Notes:
+# =============================================================================
+#
+# This configuration is CLOUD-AGNOSTIC and works on:
+# - AWS EKS (Elastic Kubernetes Service)
+# - GCP GKE (Google Kubernetes Engine)
+# - Azure AKS (Azure Kubernetes Service)
+# - Self-hosted Kubernetes
+# - Minikube/Kind (local development)
+#
+# Cloud-Specific Adjustments:
+#
+# AWS EKS:
+#   - Storage classes: gp3, gp2, io1, io2, st1, sc1
+#   - Update storage quota names if using specific classes
+#   - Consider AWS-specific annotations for ALB/NLB
+#
+# GCP GKE:
+#   - Storage classes: standard, balanced, ssd
+#   - GKE Autopilot: Some quotas managed automatically
+#   - Consider GCP-specific annotations for load balancers
+#
+# Azure AKS:
+#   - Storage classes: managed-premium, managed-standard
+#   - Consider Azure-specific annotations
+#
+# No cloud-specific features are currently used, maintaining portability.
+# =============================================================================

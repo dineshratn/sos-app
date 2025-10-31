@@ -1,0 +1,164 @@
+# =============================================================================
+# SOS App - Node.js Base Docker Image
+# =============================================================================
+# Multi-stage Dockerfile optimized for Node.js microservices
+# Features: Alpine Linux, Node.js 20 LTS, security updates, health checks
+# Target: Production deployments with minimal image size
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base Image with Node.js 20 LTS
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS base
+
+# Install security updates and necessary tools
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache \
+    dumb-init \
+    curl \
+    ca-certificates \
+    tzdata && \
+    rm -rf /var/cache/apk/*
+
+# Set up non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NPM_CONFIG_LOGLEVEL=warn \
+    TZ=UTC
+
+# -----------------------------------------------------------------------------
+# Stage 2: Dependencies Installation
+# -----------------------------------------------------------------------------
+FROM base AS dependencies
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production --ignore-scripts && \
+    npm cache clean --force
+
+# Install development dependencies in separate layer for build stage
+RUN npm ci --only=development --ignore-scripts && \
+    npm cache clean --force
+
+# -----------------------------------------------------------------------------
+# Stage 3: Build Stage (for TypeScript compilation)
+# -----------------------------------------------------------------------------
+FROM base AS build
+
+# Copy dependencies from previous stage
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy source code
+COPY . .
+
+# Build TypeScript code
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+# Stage 4: Production Image
+# -----------------------------------------------------------------------------
+FROM base AS production
+
+# Copy production dependencies
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy built application from build stage
+COPY --from=build /app/dist ./dist
+
+# Copy package.json for metadata
+COPY package*.json ./
+
+# Change ownership to non-root user
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose application port (default: 3000, override in service)
+EXPOSE 3000
+
+# Health check configuration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start application
+CMD ["node", "dist/index.js"]
+
+# -----------------------------------------------------------------------------
+# Stage 5: Development Image (optional, for local development)
+# -----------------------------------------------------------------------------
+FROM base AS development
+
+# Copy all dependencies (including dev dependencies)
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy source code
+COPY . .
+
+# Change ownership to non-root user
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose application port
+EXPOSE 3000
+
+# Expose debug port for Node.js debugging
+EXPOSE 9229
+
+# Use dumb-init
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start application in development mode with hot reload
+CMD ["npm", "run", "dev"]
+
+# =============================================================================
+# Build Instructions:
+# =============================================================================
+# Production build:
+#   docker build --target production -t sos-app/node-service:latest -f Dockerfile.node .
+#
+# Development build:
+#   docker build --target development -t sos-app/node-service:dev -f Dockerfile.node .
+#
+# Build with build args:
+#   docker build --target production --build-arg NODE_ENV=production -t sos-app/node-service:latest .
+#
+# Run container:
+#   docker run -p 3000:3000 -e NODE_ENV=production sos-app/node-service:latest
+# =============================================================================
+
+# =============================================================================
+# Security Features:
+# =============================================================================
+# - Alpine Linux base (minimal attack surface)
+# - Non-root user (nodejs:1001)
+# - Security updates applied
+# - No unnecessary packages
+# - dumb-init for proper signal handling
+# - Health checks enabled
+# - Multi-stage build (smaller final image)
+# =============================================================================
+
+# =============================================================================
+# Optimization Features:
+# =============================================================================
+# - Layer caching optimized (dependencies before source code)
+# - Production dependencies only in final image
+# - npm cache cleaned after install
+# - Minimal file copying
+# - Alpine Linux (~5MB base vs ~130MB for full Linux)
+# =============================================================================

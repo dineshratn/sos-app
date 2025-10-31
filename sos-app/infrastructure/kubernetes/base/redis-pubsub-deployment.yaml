@@ -1,0 +1,582 @@
+# =============================================================================
+# SOS App - Redis Pub/Sub Deployment Configuration
+# =============================================================================
+# Purpose: Separate Redis instance for publish/subscribe messaging (WebSocket scaling)
+# Features: No persistence (ephemeral), high throughput, internal-only
+# Deployment: 2 replicas for availability
+# Use Case: Real-time message broadcasting across WebSocket server pods
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: Redis Pub/Sub Service
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-pubsub-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: redis-pubsub
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Redis Pub/Sub service for real-time message broadcasting"
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: metrics
+    port: 9121
+    targetPort: 9121
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: redis-pubsub
+    app.kubernetes.io/component: messaging
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Redis Pub/Sub Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-pubsub-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: redis-pubsub
+    app.kubernetes.io/component: messaging
+data:
+  redis-pubsub.conf: |
+    # Network
+    bind 0.0.0.0
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+
+    # General
+    daemonize no
+    supervised no
+    pidfile /var/run/redis-pubsub.pid
+    loglevel notice
+    logfile ""
+
+    # Memory Management
+    maxmemory 128mb
+    maxmemory-policy noeviction  # Don't evict for pub/sub
+    maxmemory-samples 5
+
+    # Persistence - DISABLED (pub/sub is ephemeral)
+    save ""
+    appendonly no
+
+    # Pub/Sub Settings
+    # No special pub/sub settings needed - uses default
+
+    # Security
+    # No password required (internal-only, NetworkPolicy-protected)
+    protected-mode yes
+
+    # Limits
+    maxclients 10000
+
+    # Client Output Buffer (important for pub/sub)
+    # Increased limits for pub/sub clients
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 64mb 16mb 60  # Larger buffer for pub/sub
+
+    # Slow Log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+    # Latency Monitor
+    latency-monitor-threshold 100
+
+    # Event Notification (optional - can be enabled if needed)
+    notify-keyspace-events ""
+
+    # Advanced
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    hz 10
+    dynamic-hz yes
+
+    # High Throughput Settings
+    # Disable persistence for maximum performance
+    rdb-save-incremental-fsync no
+
+---
+# -----------------------------------------------------------------------------
+# Deployment: Redis Pub/Sub
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-pubsub
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: redis-pubsub
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "7.2"
+  annotations:
+    description: "Redis Pub/Sub for WebSocket message broadcasting"
+spec:
+  replicas: 2  # 2 instances for availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-pubsub
+      app.kubernetes.io/component: messaging
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-pubsub
+        app.kubernetes.io/component: messaging
+        app.kubernetes.io/part-of: sos-app
+        app.kubernetes.io/version: "7.2"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # Priority Class
+      priorityClassName: sos-app-high  # High priority for real-time features
+
+      # Service Account
+      serviceAccountName: default
+
+      # Security Context (Pod-level)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999  # redis user
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-Affinity (spread pods across nodes)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: redis-pubsub
+                  app.kubernetes.io/component: messaging
+              topologyKey: kubernetes.io/hostname
+
+      # Containers
+      containers:
+      # Redis Pub/Sub Container
+      - name: redis
+        image: redis:7.2-alpine
+        imagePullPolicy: IfNotPresent
+
+        # Command
+        command:
+        - redis-server
+        - /etc/redis/redis-pubsub.conf
+
+        # Ports
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        # Liveness Probe
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe
+        startupProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 10  # 50 seconds total
+
+        # Volume Mounts
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true  # No persistence needed
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
+
+      # Redis Exporter (for Prometheus metrics)
+      - name: redis-exporter
+        image: oliver006/redis_exporter:v1.55.0-alpine
+        imagePullPolicy: IfNotPresent
+
+        # Environment Variables
+        env:
+        - name: REDIS_ADDR
+          value: "localhost:6379"
+
+        # Ports
+        ports:
+        - name: metrics
+          containerPort: 9121
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9121
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9121
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534  # nobody
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-pubsub-config
+
+---
+# -----------------------------------------------------------------------------
+# PodDisruptionBudget: Ensure at least 1 instance available
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pubsub-pdb
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: redis-pubsub
+    app.kubernetes.io/component: messaging
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis-pubsub
+      app.kubernetes.io/component: messaging
+
+# =============================================================================
+# Usage Instructions
+# =============================================================================
+#
+# 1. Apply this configuration:
+#    kubectl apply -f redis-pubsub-deployment.yaml
+#
+# 2. Wait for pods to be ready:
+#    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=redis-pubsub -n sos-app --timeout=120s
+#
+# 3. Verify Redis Pub/Sub is working:
+#    kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- redis-cli ping
+#
+# 4. Connect to Redis Pub/Sub:
+#    redis://redis-pubsub-service:6379
+#
+# =============================================================================
+# Pub/Sub Channels (Design)
+# =============================================================================
+#
+# 1. Emergency-Specific Events
+#    Channel: emergency:{emergencyId}
+#    Messages:
+#      - LOCATION_UPDATE: Real-time location updates
+#      - STATUS_CHANGE: Emergency status changed
+#      - ACKNOWLEDGMENT: Contact acknowledged emergency
+#      - MESSAGE: New message in emergency
+#      - RESOLVED: Emergency resolved
+#
+# 2. Location Updates
+#    Channel: location:{userId}
+#    Messages:
+#      - LOCATION_UPDATE: Real-time location coordinates
+#      - TRACKING_START: Started tracking user
+#      - TRACKING_STOP: Stopped tracking user
+#
+# 3. Notifications
+#    Channel: notification:{userId}
+#    Messages:
+#      - EMERGENCY_ALERT: New emergency alert
+#      - CONTACT_REQUEST: New emergency contact request
+#      - SYSTEM_NOTIFICATION: System-wide notification
+#
+# 4. Presence Detection
+#    Channel: presence:{userId}
+#    Messages:
+#      - ONLINE: User came online
+#      - OFFLINE: User went offline
+#      - IDLE: User became idle
+#
+# =============================================================================
+# Usage Examples (Node.js with ioredis)
+# =============================================================================
+#
+# Publisher (Communication Service):
+# ```javascript
+# const Redis = require('ioredis');
+# const redis = new Redis('redis://redis-pubsub-service:6379');
+#
+# // Publish location update to emergency channel
+# await redis.publish(
+#   `emergency:${emergencyId}`,
+#   JSON.stringify({
+#     type: 'LOCATION_UPDATE',
+#     userId: 'user-123',
+#     latitude: 37.7749,
+#     longitude: -122.4194,
+#     timestamp: new Date().toISOString()
+#   })
+# );
+# ```
+#
+# Subscriber (WebSocket Server):
+# ```javascript
+# const Redis = require('ioredis');
+# const subscriber = new Redis('redis://redis-pubsub-service:6379');
+#
+# // Subscribe to emergency channel
+# subscriber.subscribe(`emergency:${emergencyId}`);
+#
+# subscriber.on('message', (channel, message) => {
+#   const data = JSON.parse(message);
+#   // Broadcast to connected WebSocket clients
+#   io.to(emergencyId).emit('location_update', data);
+# });
+# ```
+#
+# Pattern Subscribe (for wildcard subscriptions):
+# ```javascript
+# subscriber.psubscribe('emergency:*');
+#
+# subscriber.on('pmessage', (pattern, channel, message) => {
+#   const emergencyId = channel.split(':')[1];
+#   const data = JSON.parse(message);
+#   // Handle message
+# });
+# ```
+#
+# =============================================================================
+# Architecture Pattern
+# =============================================================================
+#
+# WebSocket Server Scaling:
+#
+# ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+# │ WebSocket   │       │ WebSocket   │       │ WebSocket   │
+# │ Server      │       │ Server      │       │ Server      │
+# │ Pod 1       │       │ Pod 2       │       │ Pod 3       │
+# └──────┬──────┘       └──────┬──────┘       └──────┬──────┘
+#        │                     │                     │
+#        │    ┌────────────────┴────────────────┐    │
+#        │    │                                  │    │
+#        └────┼──────────────────────────────────┼────┘
+#             │                                  │
+#        ┌────▼────┐                        ┌────▼────┐
+#        │ Redis   │                        │ Redis   │
+#        │ Pub/Sub │◄─────────────────────► │ Pub/Sub │
+#        │ Pod 1   │                        │ Pod 2   │
+#        └────▲────┘                        └────▲────┘
+#             │                                  │
+#             └──────────────┬───────────────────┘
+#                            │
+#                  ┌─────────▼─────────┐
+#                  │ Communication     │
+#                  │ Service           │
+#                  │ (Publisher)       │
+#                  └───────────────────┘
+#
+# Flow:
+# 1. User sends message to WebSocket Server Pod 1
+# 2. Pod 1 forwards to Communication Service
+# 3. Communication Service publishes to Redis Pub/Sub
+# 4. All WebSocket Server pods receive the message
+# 5. Each pod broadcasts to its connected clients
+#
+# =============================================================================
+# Monitoring
+# =============================================================================
+#
+# Prometheus metrics available at:
+#   http://redis-pubsub-service:9121/metrics
+#
+# Key metrics:
+# - redis_up - Redis uptime
+# - redis_connected_clients - Active connections (subscribers + publishers)
+# - redis_pubsub_channels - Number of active channels
+# - redis_pubsub_patterns - Number of pattern subscriptions
+# - redis_used_memory_bytes - Memory usage (should be low)
+#
+# =============================================================================
+# Scaling
+# =============================================================================
+#
+# Scale replicas for availability:
+#   kubectl scale deployment redis-pubsub --replicas=3 -n sos-app
+#
+# Note: All publishers/subscribers connect to all Redis Pub/Sub instances
+# through the service load balancer. Messages published to one instance
+# are only received by subscribers connected to that instance.
+#
+# For true pub/sub clustering, consider:
+# - Redis Cluster (sharded pub/sub)
+# - Dedicated message broker (Kafka, RabbitMQ)
+#
+# =============================================================================
+# Performance Tuning
+# =============================================================================
+#
+# 1. Client Output Buffer Limits:
+#    - Prevents slow subscribers from blocking publishers
+#    - Current: 64mb hard limit, 16mb soft limit (60s)
+#    - Adjust based on message size and frequency
+#
+# 2. Memory:
+#    - Pub/Sub is in-memory only (no persistence)
+#    - 128Mi should handle ~10,000 concurrent subscriptions
+#    - Increase if you see evictions
+#
+# 3. CPU:
+#    - Pub/Sub is CPU-bound for message routing
+#    - 200m CPU handles ~50,000 messages/second
+#    - Increase for higher throughput
+#
+# 4. Network:
+#    - Use pod anti-affinity to spread across nodes
+#    - Reduces network latency
+#    - Improves availability
+#
+# =============================================================================
+# Troubleshooting
+# =============================================================================
+#
+# Check active channels:
+#   kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- \
+#     redis-cli PUBSUB CHANNELS
+#
+# Check number of subscribers per channel:
+#   kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- \
+#     redis-cli PUBSUB NUMSUB emergency:123
+#
+# Check pattern subscriptions:
+#   kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- \
+#     redis-cli PUBSUB NUMPAT
+#
+# Monitor messages in real-time:
+#   kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- \
+#     redis-cli PSUBSCRIBE '*'
+#
+# Check client connections:
+#   kubectl exec -it deployment/redis-pubsub -n sos-app -c redis -- \
+#     redis-cli CLIENT LIST
+#
+# =============================================================================
+# Security Notes
+# =============================================================================
+#
+# 1. No password authentication:
+#    - Internal-only service
+#    - Protected by NetworkPolicy (allow only internal pods)
+#    - Not exposed outside the cluster
+#
+# 2. NetworkPolicy protection:
+#    - Only Communication Service can publish
+#    - Only WebSocket Services can subscribe
+#    - No external access
+#
+# 3. If you need authentication:
+#    - Uncomment "requirepass" in redis-pubsub.conf
+#    - Create secret with password
+#    - Update deployment to use secret
+#
+# =============================================================================

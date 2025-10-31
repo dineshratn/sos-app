@@ -1,0 +1,632 @@
+# =============================================================================
+# SOS App - Kafka StatefulSet Configuration
+# =============================================================================
+# Purpose: Distributed event streaming platform for high-throughput messaging
+# Features: 3-broker cluster, persistent storage, automatic replication
+# Replicas: 3 (minimum for production fault tolerance)
+# Storage: 100Gi per broker (300Gi total)
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: Kafka Headless Service (for StatefulSet)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Headless service for Kafka StatefulSet - provides stable network IDs"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  publishNotReadyAddresses: true
+  ports:
+  - name: kafka
+    port: 9092
+    targetPort: 9092
+    protocol: TCP
+  - name: kafka-internal
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+
+---
+# -----------------------------------------------------------------------------
+# Service: Kafka Client Service
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "Kafka client service for producer/consumer connections"
+spec:
+  type: ClusterIP
+  ports:
+  - name: kafka
+    port: 9092
+    targetPort: 9092
+    protocol: TCP
+  - name: metrics
+    port: 9308
+    targetPort: 9308
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Kafka Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+data:
+  # Kafka Server Properties
+  server.properties: |
+    # Broker Settings
+    broker.id.generation.enable=true
+    delete.topic.enable=true
+    auto.create.topics.enable=false
+    default.replication.factor=3
+    min.insync.replicas=2
+    unclean.leader.election.enable=false
+
+    # Zookeeper Connection
+    zookeeper.connect=zookeeper-0.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-1.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-2.zookeeper-headless.sos-app.svc.cluster.local:2181
+    zookeeper.connection.timeout.ms=18000
+
+    # Listeners
+    listeners=PLAINTEXT://:9092,INTERNAL://:9093
+    advertised.listeners=PLAINTEXT://kafka-service:9092,INTERNAL://kafka-service:9093
+    listener.security.protocol.map=PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+    inter.broker.listener.name=INTERNAL
+
+    # Log Settings
+    log.dirs=/var/lib/kafka/data
+    num.partitions=3
+    log.retention.hours=168
+    log.retention.bytes=1073741824
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+
+    # Replication Settings
+    offsets.topic.replication.factor=3
+    transaction.state.log.replication.factor=3
+    transaction.state.log.min.isr=2
+
+    # Group Coordinator Settings
+    group.initial.rebalance.delay.ms=3000
+
+    # Network Settings
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=104857600
+
+    # Performance
+    num.replica.fetchers=4
+    replica.fetch.max.bytes=1048576
+    message.max.bytes=1000012
+    compression.type=snappy
+
+  # JVM Options
+  jvm.properties: |
+    -Xms1G
+    -Xmx1G
+    -XX:+UseG1GC
+    -XX:MaxGCPauseMillis=20
+    -XX:InitiatingHeapOccupancyPercent=35
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:MaxInlineLevel=15
+    -Djava.awt.headless=true
+    -Djava.net.preferIPv4Stack=true
+
+  # Log4j Configuration
+  log4j.properties: |
+    log4j.rootLogger=INFO, stdout
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+
+---
+# -----------------------------------------------------------------------------
+# StatefulSet: Kafka
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "3.6"
+  annotations:
+    description: "Kafka cluster for event streaming and messaging"
+spec:
+  serviceName: kafka-headless
+  replicas: 3  # 3-broker cluster
+
+  # Pod Management Policy
+  podManagementPolicy: OrderedReady
+
+  # Update Strategy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
+  # Selector
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/component: messaging
+
+  # Pod Template
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/component: messaging
+        app.kubernetes.io/part-of: sos-app
+        app.kubernetes.io/version: "3.6"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # Priority Class
+      priorityClassName: sos-app-high
+
+      # Service Account
+      serviceAccountName: default
+
+      # Security Context (Pod-level)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # kafka user
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-Affinity (spread pods across nodes)
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: kafka
+                app.kubernetes.io/component: messaging
+            topologyKey: kubernetes.io/hostname
+
+      # Init Containers
+      initContainers:
+      # Fix permissions
+      - name: init-kafka
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 1000:1000 /var/lib/kafka/data
+          chmod 755 /var/lib/kafka/data
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        securityContext:
+          runAsUser: 0  # Need root to chown
+          runAsNonRoot: false
+
+      # Containers
+      containers:
+      # Kafka Container
+      - name: kafka
+        image: confluentinc/cp-kafka:7.5.0
+        imagePullPolicy: IfNotPresent
+
+        # Environment Variables
+        env:
+        # Kafka Configuration
+        - name: KAFKA_BROKER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper-0.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-1.zookeeper-headless.sos-app.svc.cluster.local:2181,zookeeper-2.zookeeper-headless.sos-app.svc.cluster.local:2181"
+
+        # Listeners
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://:9092,INTERNAL://:9093"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://$(POD_NAME).kafka-headless.sos-app.svc.cluster.local:9092,INTERNAL://$(POD_NAME).kafka-headless.sos-app.svc.cluster.local:9093"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL"
+
+        # Pod Information
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+
+        # Replication
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "2"
+        - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+          value: "3"
+        - name: KAFKA_MIN_INSYNC_REPLICAS
+          value: "2"
+
+        # Log Settings
+        - name: KAFKA_LOG_DIRS
+          value: "/var/lib/kafka/data"
+        - name: KAFKA_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_LOG_RETENTION_BYTES
+          value: "1073741824"
+        - name: KAFKA_LOG_SEGMENT_BYTES
+          value: "1073741824"
+
+        # Performance
+        - name: KAFKA_NUM_NETWORK_THREADS
+          value: "3"
+        - name: KAFKA_NUM_IO_THREADS
+          value: "8"
+        - name: KAFKA_SOCKET_SEND_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_RECEIVE_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_REQUEST_MAX_BYTES
+          value: "104857600"
+
+        # JVM Options
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xms1G -Xmx1G"
+        - name: KAFKA_JVM_PERFORMANCE_OPTS
+          value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35"
+
+        # Ports
+        ports:
+        - name: kafka
+          containerPort: 9092
+          protocol: TCP
+        - name: kafka-internal
+          containerPort: 9093
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2
+            memory: 2Gi
+
+        # Liveness Probe
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe
+        startupProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 60  # 300 seconds total
+
+        # Volume Mounts
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+
+        # Security Context (Container-level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Kafka Exporter (for Prometheus metrics)
+      - name: kafka-exporter
+        image: danielqsj/kafka-exporter:latest
+        imagePullPolicy: IfNotPresent
+
+        # Environment Variables
+        env:
+        - name: KAFKA_SERVER
+          value: "localhost:9092"
+
+        # Ports
+        ports:
+        - name: metrics
+          containerPort: 9308
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9308
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9308
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534  # nobody
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes: []
+
+  # Volume Claim Templates
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/component: messaging
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 100Gi
+      # storageClassName: fast-ssd  # Uncomment and adjust for your cluster
+
+---
+# -----------------------------------------------------------------------------
+# PodDisruptionBudget: Ensure at least 2 brokers available
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kafka-pdb
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/component: messaging
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/component: messaging
+
+# =============================================================================
+# Usage Instructions
+# =============================================================================
+#
+# 1. Deploy Zookeeper first:
+#    kubectl apply -f zookeeper-statefulset.yaml
+#    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=zookeeper -n sos-app --timeout=300s
+#
+# 2. Apply this configuration:
+#    kubectl apply -f kafka-statefulset.yaml
+#
+# 3. Wait for all brokers to be ready:
+#    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka -n sos-app --timeout=600s
+#
+# 4. Verify Kafka cluster:
+#    kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#      kafka-broker-api-versions --bootstrap-server localhost:9092
+#
+# 5. Create a test topic:
+#    kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#      kafka-topics --create --topic test --partitions 3 --replication-factor 3 \
+#      --bootstrap-server localhost:9092
+#
+# 6. List topics:
+#    kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#      kafka-topics --list --bootstrap-server localhost:9092
+#
+# 7. Connection string:
+#    kafka-0.kafka-headless.sos-app.svc.cluster.local:9092,kafka-1.kafka-headless.sos-app.svc.cluster.local:9092,kafka-2.kafka-headless.sos-app.svc.cluster.local:9092
+#
+#    Or use service (load balanced):
+#    kafka-service:9092
+#
+# =============================================================================
+# Kafka Topic Design for SOS App
+# =============================================================================
+#
+# Emergency Events:
+#   emergency.created          - New emergency alerts (3 partitions, RF=3)
+#   emergency.updated          - Emergency status updates (3 partitions, RF=3)
+#   emergency.resolved         - Emergency resolutions (3 partitions, RF=3)
+#
+# Location Updates:
+#   location.realtime          - Real-time location updates (6 partitions, RF=3)
+#   location.geofence          - Geofence enter/exit events (3 partitions, RF=3)
+#
+# Notifications:
+#   notification.push          - Push notifications (3 partitions, RF=3)
+#   notification.sms           - SMS notifications (3 partitions, RF=3)
+#   notification.email         - Email notifications (3 partitions, RF=3)
+#
+# Device Events:
+#   device.telemetry           - Device telemetry (6 partitions, RF=3)
+#   device.alerts              - Device alerts (fall, button, etc.) (3 partitions, RF=3)
+#
+# Audit Logs:
+#   audit.access               - Access logs (3 partitions, RF=3)
+#   audit.changes              - Data change logs (3 partitions, RF=3)
+#
+# Dead Letter Queue:
+#   dlq.failed-messages        - Failed message processing (3 partitions, RF=3)
+#
+# =============================================================================
+# Create Topics Script
+# =============================================================================
+#
+# Save as create-topics.sh and run:
+#
+#!/bin/bash
+KAFKA_POD="kafka-0"
+NAMESPACE="sos-app"
+BOOTSTRAP="localhost:9092"
+
+topics=(
+  "emergency.created:3:3"
+  "emergency.updated:3:3"
+  "emergency.resolved:3:3"
+  "location.realtime:6:3"
+  "location.geofence:3:3"
+  "notification.push:3:3"
+  "notification.sms:3:3"
+  "notification.email:3:3"
+  "device.telemetry:6:3"
+  "device.alerts:3:3"
+  "audit.access:3:3"
+  "audit.changes:3:3"
+  "dlq.failed-messages:3:3"
+)
+
+for topic_config in "${topics[@]}"; do
+  IFS=':' read -r topic partitions replication <<< "$topic_config"
+  echo "Creating topic: $topic (partitions=$partitions, replication=$replication)"
+  kubectl exec -it $KAFKA_POD -n $NAMESPACE -c kafka -- \
+    kafka-topics --create \
+    --topic "$topic" \
+    --partitions "$partitions" \
+    --replication-factor "$replication" \
+    --config retention.ms=604800000 \
+    --config compression.type=snappy \
+    --bootstrap-server $BOOTSTRAP
+done
+#
+# =============================================================================
+# Monitoring
+# =============================================================================
+#
+# Prometheus metrics available at:
+#   http://kafka-service:9308/metrics
+#
+# Key metrics:
+# - kafka_server_brokertopicmetrics_messagesin_total - Messages in
+# - kafka_server_brokertopicmetrics_bytesin_total - Bytes in
+# - kafka_server_brokertopicmetrics_bytesout_total - Bytes out
+# - kafka_controller_kafkacontroller_activecontrollercount - Active controller
+# - kafka_server_replicamanager_underreplicatedpartitions - Under-replicated partitions
+#
+# =============================================================================
+# Performance Tuning
+# =============================================================================
+#
+# Producer Configuration:
+#   acks=all                           # Wait for all replicas
+#   compression.type=snappy            # Use snappy compression
+#   batch.size=16384                   # Batch size in bytes
+#   linger.ms=10                       # Wait 10ms to batch messages
+#   max.in.flight.requests.per.connection=5
+#
+# Consumer Configuration:
+#   fetch.min.bytes=1                  # Minimum bytes to fetch
+#   fetch.max.wait.ms=500              # Maximum wait time
+#   max.partition.fetch.bytes=1048576  # Max bytes per partition
+#   auto.offset.reset=earliest         # Start from beginning if no offset
+#
+# =============================================================================
+# Troubleshooting
+# =============================================================================
+#
+# Check broker logs:
+#   kubectl logs kafka-0 -n sos-app -c kafka
+#
+# Describe topic:
+#   kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#     kafka-topics --describe --topic emergency.created --bootstrap-server localhost:9092
+#
+# Consumer groups:
+#   kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#     kafka-consumer-groups --list --bootstrap-server localhost:9092
+#
+# Lag monitoring:
+#   kubectl exec -it kafka-0 -n sos-app -c kafka -- \
+#     kafka-consumer-groups --describe --group my-group --bootstrap-server localhost:9092
+#
+# =============================================================================

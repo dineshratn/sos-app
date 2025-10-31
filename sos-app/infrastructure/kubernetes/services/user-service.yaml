@@ -1,0 +1,324 @@
+# =============================================================================
+# SOS App - User Service Deployment
+# =============================================================================
+# Purpose: User profile management and emergency contacts
+# Language: Go
+# Database: PostgreSQL (sos_app_users)
+# Cache: Redis
+# Message Broker: Kafka
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: User Service
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: sos-app
+  annotations:
+    description: "User profile and emergency contact management"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  - name: metrics
+    port: 9091
+    targetPort: 9091
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: user-service
+
+---
+# -----------------------------------------------------------------------------
+# Deployment: User Service
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: user-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: user-service
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: sos-app
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      priorityClassName: sos-app-high
+      serviceAccountName: default
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: user-service
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: user-service
+        image: sos-app/user-service:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: grpc
+          containerPort: 9090
+        - name: metrics
+          containerPort: 9091
+
+        env:
+        # Service Configuration
+        - name: SERVICE_NAME
+          value: "user-service"
+        - name: SERVICE_VERSION
+          value: "1.0.0"
+        - name: HTTP_PORT
+          value: "8080"
+        - name: GRPC_PORT
+          value: "9090"
+
+        # Database
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "sos_app_users"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: users-db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: users-db-password
+        - name: DB_MAX_CONNECTIONS
+          value: "25"
+
+        # Redis Cache
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: redis-password
+        - name: CACHE_TTL_USER_PROFILE
+          value: "1800"  # 30 minutes
+        - name: CACHE_TTL_CONTACTS
+          value: "3600"  # 1 hour
+
+        # Kafka
+        - name: KAFKA_BROKERS
+          value: "kafka-service:9092"
+        - name: KAFKA_CONSUMER_GROUP
+          value: "user-service"
+
+        # S3 Storage (profile pictures)
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-storage
+              key: S3_ENDPOINT
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: object-storage-credentials
+              key: s3-bucket-name
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: object-storage-credentials
+              key: s3-access-key-id
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: object-storage-credentials
+              key: s3-secret-access-key
+
+        # Auth Service (for token validation)
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service:9090"
+
+        # Logging
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-logging
+              key: LOG_LEVEL
+
+        # Tracing
+        - name: JAEGER_AGENT_HOST
+          value: "jaeger-agent"
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-service-hpa
+  namespace: sos-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+  namespace: sos-app
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+
+# =============================================================================
+# User Service API Endpoints
+# =============================================================================
+#
+# Profile Management:
+# GET    /api/v1/users/me                    - Get current user profile
+# PUT    /api/v1/users/me                    - Update profile
+# DELETE /api/v1/users/me                    - Delete account
+# POST   /api/v1/users/me/avatar             - Upload profile picture
+# GET    /api/v1/users/:id                   - Get user by ID (public)
+#
+# Emergency Contacts:
+# GET    /api/v1/users/me/contacts           - List emergency contacts
+# POST   /api/v1/users/me/contacts           - Add emergency contact
+# PUT    /api/v1/users/me/contacts/:id       - Update contact
+# DELETE /api/v1/users/me/contacts/:id       - Remove contact
+# POST   /api/v1/users/me/contacts/:id/verify - Send verification request
+#
+# Settings:
+# GET    /api/v1/users/me/settings           - Get user settings
+# PUT    /api/v1/users/me/settings           - Update settings
+#
+# Privacy:
+# GET    /api/v1/users/me/privacy            - Get privacy settings
+# PUT    /api/v1/users/me/privacy            - Update privacy settings
+#
+# =============================================================================
+# Database Schema (sos_app_users)
+# =============================================================================
+#
+# users:
+# - id, email, first_name, last_name
+# - phone_number, date_of_birth, gender
+# - avatar_url, bio, address
+# - created_at, updated_at
+#
+# emergency_contacts:
+# - id, user_id, name, relationship
+# - phone_number, email, priority
+# - verified, verification_token
+# - created_at, updated_at
+#
+# user_settings:
+# - user_id, emergency_auto_share_location
+# - notification_preferences (JSONB)
+# - privacy_settings (JSONB)
+#
+# =============================================================================

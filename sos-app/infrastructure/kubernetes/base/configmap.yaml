@@ -1,0 +1,539 @@
+# =============================================================================
+# SOS App - Kubernetes ConfigMaps for Shared Configuration
+# =============================================================================
+# Purpose: Centralize environment-agnostic configuration across all services
+# Features: Log levels, timeouts, retry policies, feature flags
+# Cloud-Agnostic: Works on any Kubernetes cluster
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Global Application Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: configuration
+    config-type: application
+  annotations:
+    description: "Global application configuration for all SOS App services"
+    version: "1.0.0"
+data:
+  # Environment
+  NODE_ENV: "production"
+  ENVIRONMENT: "production"
+
+  # Application Info
+  APP_NAME: "SOS Emergency Response Platform"
+  APP_VERSION: "1.0.0"
+
+  # API Configuration
+  API_VERSION: "v1"
+  API_PREFIX: "/api/v1"
+
+  # CORS Configuration
+  CORS_ENABLED: "true"
+  CORS_ORIGIN: "*"  # Override in production with specific domains
+  CORS_CREDENTIALS: "true"
+
+  # Rate Limiting
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_WINDOW_MS: "60000"  # 1 minute
+  RATE_LIMIT_MAX_REQUESTS: "100"  # 100 requests per minute
+
+  # Pagination
+  DEFAULT_PAGE_SIZE: "20"
+  MAX_PAGE_SIZE: "100"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Logging Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-logging
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: logging
+    config-type: logging
+data:
+  # Log Levels (error, warn, info, http, verbose, debug, silly)
+  LOG_LEVEL: "info"
+  LOG_LEVEL_CONSOLE: "info"
+  LOG_LEVEL_FILE: "info"
+
+  # Log Format (json, simple, combined)
+  LOG_FORMAT: "json"
+
+  # Log Configuration
+  LOG_COLORIZE: "false"  # Disable colors for structured logging
+  LOG_TIMESTAMP: "true"
+  LOG_PRETTY_PRINT: "false"
+
+  # Request Logging
+  LOG_REQUESTS: "true"
+  LOG_REQUEST_BODY: "false"  # Security: Don't log request bodies
+  LOG_RESPONSE_BODY: "false"
+
+  # Error Logging
+  LOG_ERRORS: "true"
+  LOG_ERROR_STACK: "true"
+
+  # Log Retention (for file-based logs)
+  LOG_MAX_FILES: "7"
+  LOG_MAX_SIZE: "20m"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Database Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-database
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: database
+    config-type: database
+data:
+  # PostgreSQL Configuration
+  POSTGRES_HOST: "postgres-service.sos-app.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_SSL: "false"  # Set to true in production with proper certs
+  POSTGRES_POOL_MIN: "2"
+  POSTGRES_POOL_MAX: "10"
+  POSTGRES_IDLE_TIMEOUT_MS: "30000"
+  POSTGRES_CONNECTION_TIMEOUT_MS: "2000"
+
+  # MongoDB Configuration
+  MONGODB_HOST: "mongodb-service.sos-app.svc.cluster.local"
+  MONGODB_PORT: "27017"
+  MONGODB_REPLICA_SET: "sos-app-rs"
+  MONGODB_AUTH_SOURCE: "admin"
+  MONGODB_SSL: "false"
+  MONGODB_POOL_SIZE: "10"
+
+  # Redis Configuration
+  REDIS_HOST: "redis-service.sos-app.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_KEY_PREFIX: "sos-app:"
+  REDIS_CONNECT_TIMEOUT: "5000"
+  REDIS_COMMAND_TIMEOUT: "5000"
+
+  # Redis Pub/Sub Configuration
+  REDIS_PUBSUB_HOST: "redis-pubsub-service.sos-app.svc.cluster.local"
+  REDIS_PUBSUB_PORT: "6379"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Cache Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-cache
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: cache
+    config-type: cache
+data:
+  # Cache TTL (Time To Live) in seconds
+  CACHE_TTL_SHORT: "300"      # 5 minutes
+  CACHE_TTL_MEDIUM: "1800"    # 30 minutes
+  CACHE_TTL_LONG: "3600"      # 1 hour
+  CACHE_TTL_SESSION: "86400"  # 24 hours
+
+  # Cache Configuration
+  CACHE_ENABLED: "true"
+  CACHE_PREFIX: "sos-app:"
+  CACHE_COMPRESSION: "true"
+
+  # Specific Cache TTLs
+  CACHE_TTL_USER_PROFILE: "1800"      # 30 minutes
+  CACHE_TTL_MEDICAL_PROFILE: "3600"   # 1 hour
+  CACHE_TTL_EMERGENCY_CONTACTS: "3600" # 1 hour
+  CACHE_TTL_DEVICE_STATUS: "300"      # 5 minutes
+  CACHE_TTL_LOCATION: "60"            # 1 minute
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Message Queue Configuration (Kafka)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-kafka
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: messaging
+    config-type: kafka
+data:
+  # Kafka Brokers
+  KAFKA_BROKERS: "kafka-0.kafka-service.sos-app.svc.cluster.local:9092,kafka-1.kafka-service.sos-app.svc.cluster.local:9092,kafka-2.kafka-service.sos-app.svc.cluster.local:9092"
+  KAFKA_CLIENT_ID: "sos-app"
+
+  # Kafka Topics
+  KAFKA_TOPIC_EMERGENCY_CREATED: "emergency-created"
+  KAFKA_TOPIC_EMERGENCY_UPDATED: "emergency-updated"
+  KAFKA_TOPIC_EMERGENCY_RESOLVED: "emergency-resolved"
+  KAFKA_TOPIC_LOCATION_UPDATED: "location-updated"
+  KAFKA_TOPIC_CONTACT_ACKNOWLEDGED: "contact-acknowledged"
+  KAFKA_TOPIC_NOTIFICATION_SENT: "notification-sent"
+
+  # Kafka Producer Configuration
+  KAFKA_PRODUCER_ACKS: "all"
+  KAFKA_PRODUCER_COMPRESSION: "snappy"
+  KAFKA_PRODUCER_BATCH_SIZE: "16384"
+  KAFKA_PRODUCER_LINGER_MS: "10"
+
+  # Kafka Consumer Configuration
+  KAFKA_CONSUMER_GROUP_ID: "sos-app-group"
+  KAFKA_CONSUMER_SESSION_TIMEOUT: "30000"
+  KAFKA_CONSUMER_HEARTBEAT_INTERVAL: "3000"
+  KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: MQTT Configuration (IoT Devices)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-mqtt
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: mqtt
+    config-type: mqtt
+data:
+  # MQTT Broker
+  MQTT_BROKER_HOST: "mqtt-broker-service.sos-app.svc.cluster.local"
+  MQTT_BROKER_PORT: "1883"
+  MQTT_BROKER_PROTOCOL: "mqtt"
+  MQTT_BROKER_WS_PORT: "9001"  # WebSocket port
+
+  # MQTT Topics
+  MQTT_TOPIC_DEVICE_STATUS: "device/+/status"
+  MQTT_TOPIC_DEVICE_ALERT: "device/+/alert"
+  MQTT_TOPIC_DEVICE_LOCATION: "device/+/location"
+  MQTT_TOPIC_DEVICE_HEARTBEAT: "device/+/heartbeat"
+
+  # MQTT Configuration
+  MQTT_QOS: "1"  # At least once delivery
+  MQTT_RETAIN: "false"
+  MQTT_CLEAN_SESSION: "true"
+  MQTT_KEEPALIVE: "60"
+  MQTT_RECONNECT_PERIOD: "5000"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Timeout Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-timeouts
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: timeouts
+    config-type: timeouts
+data:
+  # HTTP Timeouts (milliseconds)
+  HTTP_REQUEST_TIMEOUT: "30000"     # 30 seconds
+  HTTP_LONG_TIMEOUT: "60000"        # 60 seconds (for long operations)
+  HTTP_UPLOAD_TIMEOUT: "120000"     # 2 minutes (for file uploads)
+
+  # Service Timeouts
+  SERVICE_TIMEOUT: "5000"           # 5 seconds
+  DATABASE_TIMEOUT: "5000"          # 5 seconds
+  CACHE_TIMEOUT: "1000"             # 1 second
+  EXTERNAL_API_TIMEOUT: "10000"     # 10 seconds
+
+  # WebSocket Timeouts
+  WS_PING_INTERVAL: "30000"         # 30 seconds
+  WS_PONG_TIMEOUT: "5000"           # 5 seconds
+
+  # JWT Token Timeouts
+  JWT_ACCESS_TOKEN_EXPIRY: "900"    # 15 minutes (in seconds)
+  JWT_REFRESH_TOKEN_EXPIRY: "604800" # 7 days (in seconds)
+  JWT_RESET_TOKEN_EXPIRY: "3600"    # 1 hour (in seconds)
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Retry Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-retry
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: retry
+    config-type: retry
+data:
+  # Retry Policy
+  RETRY_ENABLED: "true"
+  RETRY_MAX_ATTEMPTS: "3"
+  RETRY_INITIAL_DELAY: "1000"     # 1 second
+  RETRY_MAX_DELAY: "30000"        # 30 seconds
+  RETRY_BACKOFF_MULTIPLIER: "2"   # Exponential backoff
+
+  # Retryable HTTP Status Codes
+  RETRY_STATUS_CODES: "408,429,500,502,503,504"
+
+  # Service-Specific Retry Configuration
+  RETRY_DATABASE_MAX_ATTEMPTS: "5"
+  RETRY_CACHE_MAX_ATTEMPTS: "3"
+  RETRY_EXTERNAL_API_MAX_ATTEMPTS: "3"
+  RETRY_NOTIFICATION_MAX_ATTEMPTS: "5"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Feature Flags
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-features
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: features
+    config-type: features
+data:
+  # Core Features
+  FEATURE_EMERGENCY_ALERTS: "true"
+  FEATURE_LOCATION_TRACKING: "true"
+  FEATURE_MEDICAL_PROFILES: "true"
+  FEATURE_IOT_DEVICES: "true"
+
+  # Communication Features
+  FEATURE_SMS_NOTIFICATIONS: "true"
+  FEATURE_PUSH_NOTIFICATIONS: "true"
+  FEATURE_EMAIL_NOTIFICATIONS: "true"
+  FEATURE_VOICE_CALLS: "true"
+  FEATURE_VIDEO_CALLS: "false"  # Not implemented yet
+
+  # Advanced Features
+  FEATURE_AI_FALL_DETECTION: "true"
+  FEATURE_VOICE_ACTIVATION: "true"
+  FEATURE_OFFLINE_MODE: "true"
+  FEATURE_GEOFENCING: "true"
+
+  # Social Features
+  FEATURE_SOCIAL_LOGIN_GOOGLE: "true"
+  FEATURE_SOCIAL_LOGIN_APPLE: "true"
+  FEATURE_SOCIAL_LOGIN_FACEBOOK: "false"
+
+  # Analytics and Reporting
+  FEATURE_ANALYTICS: "true"
+  FEATURE_REPORTING: "true"
+  FEATURE_EXPORT_DATA: "true"
+
+  # Beta Features
+  FEATURE_BETA_WEARABLE_INTEGRATION: "false"
+  FEATURE_BETA_AR_NAVIGATION: "false"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Emergency Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-emergency
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: emergency
+    config-type: emergency
+data:
+  # Emergency Timeout Configuration
+  EMERGENCY_AUTO_RESOLVE_TIMEOUT: "86400000"  # 24 hours in ms
+  EMERGENCY_ESCALATION_TIMEOUT: "300000"      # 5 minutes in ms
+  EMERGENCY_CONTACT_RETRY_INTERVAL: "60000"   # 1 minute in ms
+
+  # Emergency Contact Limits
+  EMERGENCY_MAX_CONTACTS: "10"
+  EMERGENCY_MAX_PRIMARY_CONTACTS: "3"
+
+  # Location Tracking
+  LOCATION_UPDATE_INTERVAL: "30000"     # 30 seconds
+  LOCATION_HIGH_ACCURACY: "true"
+  LOCATION_TIMEOUT: "10000"             # 10 seconds
+  LOCATION_MAX_AGE: "5000"              # 5 seconds
+  LOCATION_TRAIL_RETENTION: "604800"    # 7 days in seconds
+
+  # Emergency Types
+  EMERGENCY_TYPES: "MEDICAL,FIRE,POLICE,GENERAL,FALL_DETECTED,DEVICE_ALERT"
+
+  # Emergency Priority
+  EMERGENCY_PRIORITY_CRITICAL: "MEDICAL,FIRE,FALL_DETECTED"
+  EMERGENCY_PRIORITY_HIGH: "POLICE,DEVICE_ALERT"
+  EMERGENCY_PRIORITY_NORMAL: "GENERAL"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Notification Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-notifications
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: notifications
+    config-type: notifications
+data:
+  # Notification Channels
+  NOTIFICATION_SMS_ENABLED: "true"
+  NOTIFICATION_PUSH_ENABLED: "true"
+  NOTIFICATION_EMAIL_ENABLED: "true"
+  NOTIFICATION_VOICE_ENABLED: "true"
+
+  # Notification Retry Configuration
+  NOTIFICATION_MAX_RETRIES: "5"
+  NOTIFICATION_RETRY_DELAY: "60000"  # 1 minute
+
+  # Rate Limiting
+  NOTIFICATION_RATE_LIMIT_SMS: "10"    # Max 10 SMS per minute per user
+  NOTIFICATION_RATE_LIMIT_PUSH: "30"   # Max 30 push per minute per user
+  NOTIFICATION_RATE_LIMIT_EMAIL: "5"   # Max 5 emails per minute per user
+
+  # Notification Templates
+  NOTIFICATION_TEMPLATE_DIR: "/app/templates/notifications"
+
+  # Notification Priority
+  NOTIFICATION_PRIORITY_HIGH: "emergency-alert,emergency-resolved"
+  NOTIFICATION_PRIORITY_NORMAL: "contact-acknowledged,location-updated"
+  NOTIFICATION_PRIORITY_LOW: "profile-updated,system-notification"
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Security Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-security
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: security
+    config-type: security
+data:
+  # Password Policy
+  PASSWORD_MIN_LENGTH: "8"
+  PASSWORD_REQUIRE_UPPERCASE: "true"
+  PASSWORD_REQUIRE_LOWERCASE: "true"
+  PASSWORD_REQUIRE_NUMBER: "true"
+  PASSWORD_REQUIRE_SPECIAL: "true"
+  PASSWORD_MAX_AGE_DAYS: "90"
+
+  # Account Security
+  MAX_LOGIN_ATTEMPTS: "5"
+  ACCOUNT_LOCKOUT_DURATION: "900"  # 15 minutes in seconds
+  SESSION_TIMEOUT: "1800"          # 30 minutes in seconds
+
+  # MFA Configuration
+  MFA_ENABLED: "true"
+  MFA_ISSUER: "SOS App"
+  MFA_TOKEN_WINDOW: "1"  # Allow 1 period before/after for clock skew
+
+  # Security Headers
+  SECURITY_HEADERS_ENABLED: "true"
+  HELMET_ENABLED: "true"
+  HSTS_ENABLED: "true"
+  HSTS_MAX_AGE: "31536000"  # 1 year in seconds
+
+  # HIPAA Compliance
+  HIPAA_AUDIT_LOG_ENABLED: "true"
+  HIPAA_ENCRYPTION_AT_REST: "true"
+  HIPAA_ENCRYPTION_IN_TRANSIT: "true"
+  HIPAA_ACCESS_LOG_RETENTION_DAYS: "2555"  # 7 years
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: Monitoring and Observability
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sos-app-monitoring
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: sos-app
+    app.kubernetes.io/component: monitoring
+    config-type: monitoring
+data:
+  # Metrics
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"
+  METRICS_PATH: "/metrics"
+
+  # Health Checks
+  HEALTH_CHECK_ENABLED: "true"
+  HEALTH_CHECK_PATH: "/health"
+  READINESS_CHECK_PATH: "/ready"
+  LIVENESS_CHECK_PATH: "/health"
+
+  # Tracing
+  TRACING_ENABLED: "true"
+  TRACING_SAMPLE_RATE: "0.1"  # Sample 10% of requests
+  TRACING_SERVICE_NAME: "sos-app"
+
+  # APM
+  APM_ENABLED: "false"  # Set to true if using APM service
+  APM_SERVER_URL: ""
+
+  # Error Tracking
+  ERROR_TRACKING_ENABLED: "true"
+  ERROR_TRACKING_SAMPLE_RATE: "1.0"  # Track all errors
+
+# =============================================================================
+# Usage Instructions:
+# =============================================================================
+#
+# Apply all ConfigMaps:
+#   kubectl apply -f infrastructure/kubernetes/base/configmap.yaml
+#
+# View all ConfigMaps:
+#   kubectl get configmap -n sos-app
+#
+# View specific ConfigMap:
+#   kubectl describe configmap sos-app-config -n sos-app
+#   kubectl get configmap sos-app-config -n sos-app -o yaml
+#
+# Use in Pod/Deployment:
+#   envFrom:
+#   - configMapRef:
+#       name: sos-app-config
+#   - configMapRef:
+#       name: sos-app-logging
+#
+# Or use specific keys:
+#   env:
+#   - name: LOG_LEVEL
+#     valueFrom:
+#       configMapKeyRef:
+#         name: sos-app-logging
+#         key: LOG_LEVEL
+#
+# Update ConfigMap (changes require pod restart):
+#   kubectl edit configmap sos-app-config -n sos-app
+#   kubectl rollout restart deployment/<deployment-name> -n sos-app
+#
+# =============================================================================

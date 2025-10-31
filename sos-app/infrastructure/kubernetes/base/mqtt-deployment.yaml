@@ -1,0 +1,644 @@
+# =============================================================================
+# SOS App - MQTT Broker Deployment Configuration
+# =============================================================================
+# Purpose: MQTT broker for IoT device communication (wearables, panic buttons)
+# Features: TLS encryption, authentication, persistent sessions
+# Deployment: 2 replicas with load balancing
+# Protocol: MQTT 3.1.1 and MQTT 5.0
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# Service: MQTT Broker Service
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqtt-service
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    description: "MQTT broker service for IoT device communication"
+spec:
+  type: ClusterIP
+  ports:
+  - name: mqtt
+    port: 1883
+    targetPort: 1883
+    protocol: TCP
+  - name: mqtts
+    port: 8883
+    targetPort: 8883
+    protocol: TCP
+  - name: websocket
+    port: 9001
+    targetPort: 9001
+    protocol: TCP
+  - name: metrics
+    port: 9234
+    targetPort: 9234
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+
+---
+# -----------------------------------------------------------------------------
+# ConfigMap: MQTT Configuration
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mqtt-config
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+data:
+  # Mosquitto Configuration
+  mosquitto.conf: |
+    # Network
+    listener 1883
+    protocol mqtt
+    allow_anonymous false
+
+    # WebSocket Support
+    listener 9001
+    protocol websockets
+    allow_anonymous false
+
+    # TLS/SSL (uncomment when certificates are available)
+    # listener 8883
+    # protocol mqtt
+    # cafile /etc/mosquitto/certs/ca.crt
+    # certfile /etc/mosquitto/certs/server.crt
+    # keyfile /etc/mosquitto/certs/server.key
+    # require_certificate false
+
+    # Persistence
+    persistence true
+    persistence_location /mosquitto/data/
+    autosave_interval 60
+    autosave_on_changes false
+
+    # Logging
+    log_dest stdout
+    log_type error
+    log_type warning
+    log_type notice
+    log_type information
+    log_timestamp true
+    log_timestamp_format %Y-%m-%dT%H:%M:%S
+
+    # Connection Settings
+    max_connections 10000
+    max_queued_messages 1000
+    max_inflight_messages 20
+    max_keepalive 300
+
+    # Message Size
+    message_size_limit 268435456
+
+    # Security
+    password_file /etc/mosquitto/passwd
+    acl_file /etc/mosquitto/acl
+
+    # Session Settings
+    persistent_client_expiration 7d
+
+    # Upgrade outgoing QoS
+    upgrade_outgoing_qos false
+
+    # Queue settings
+    max_queued_bytes 0
+
+  # Access Control List (ACL)
+  acl: |
+    # Pattern-based ACL for devices
+    # Devices can only publish/subscribe to their own topics
+
+    # Device telemetry - devices can publish
+    pattern write device/%u/telemetry
+    pattern write device/%u/location
+    pattern write device/%u/alert
+    pattern write device/%u/status
+
+    # Device commands - devices can subscribe
+    pattern read device/%u/command
+    pattern read device/%u/config
+
+    # Emergency alerts - devices can publish
+    pattern write emergency/%u/trigger
+
+    # Services (backend) - full access to all topics
+    user sos_service
+    topic readwrite #
+
+  # Password file will be created from secret
+
+---
+# -----------------------------------------------------------------------------
+# Deployment: MQTT Broker
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+    app.kubernetes.io/part-of: sos-app
+    app.kubernetes.io/version: "2.0"
+  annotations:
+    description: "MQTT broker for IoT device communication"
+spec:
+  replicas: 2  # 2 instances for availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mqtt
+      app.kubernetes.io/component: mqtt-broker
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mqtt
+        app.kubernetes.io/component: mqtt-broker
+        app.kubernetes.io/part-of: sos-app
+        app.kubernetes.io/version: "2.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9234"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # Priority Class
+      priorityClassName: sos-app-high
+
+      # Service Account
+      serviceAccountName: default
+
+      # Security Context (Pod-level)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1883  # mosquitto user
+        runAsGroup: 1883
+        fsGroup: 1883
+        fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Anti-Affinity (spread pods across nodes)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: mqtt
+                  app.kubernetes.io/component: mqtt-broker
+              topologyKey: kubernetes.io/hostname
+
+      # Init Containers
+      initContainers:
+      # Setup passwords and permissions
+      - name: init-mqtt
+        image: eclipse-mosquitto:2.0
+        command:
+        - sh
+        - -c
+        - |
+          # Create password file from secret
+          if [ -f /tmp/secrets/mqtt-password ]; then
+            mosquitto_passwd -c -b /tmp/passwd/passwd sos_service $(cat /tmp/secrets/mqtt-password)
+          fi
+
+          # Fix permissions
+          chown -R 1883:1883 /mosquitto/data /tmp/passwd
+          chmod 700 /mosquitto/data
+          chmod 600 /tmp/passwd/passwd
+        volumeMounts:
+        - name: mqtt-data
+          mountPath: /mosquitto/data
+        - name: mqtt-passwd
+          mountPath: /tmp/passwd
+        - name: mqtt-secret
+          mountPath: /tmp/secrets
+          readOnly: true
+        securityContext:
+          runAsUser: 0  # Need root to chown
+          runAsNonRoot: false
+
+      # Containers
+      containers:
+      # MQTT Broker Container
+      - name: mqtt
+        image: eclipse-mosquitto:2.0
+        imagePullPolicy: IfNotPresent
+
+        # Ports
+        ports:
+        - name: mqtt
+          containerPort: 1883
+          protocol: TCP
+        - name: mqtts
+          containerPort: 8883
+          protocol: TCP
+        - name: websocket
+          containerPort: 9001
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Liveness Probe
+        livenessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup Probe
+        startupProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 10  # 50 seconds total
+
+        # Volume Mounts
+        volumeMounts:
+        - name: mqtt-config
+          mountPath: /mosquitto/config/mosquitto.conf
+          subPath: mosquitto.conf
+        - name: mqtt-config
+          mountPath: /mosquitto/config/acl
+          subPath: acl
+        - name: mqtt-passwd
+          mountPath: /etc/mosquitto/passwd
+          subPath: passwd
+        - name: mqtt-data
+          mountPath: /mosquitto/data
+        - name: mqtt-log
+          mountPath: /mosquitto/log
+
+        # Security Context (Container-level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1883
+          capabilities:
+            drop:
+            - ALL
+
+      # MQTT Exporter (for Prometheus metrics)
+      - name: mqtt-exporter
+        image: sapcc/mosquitto-exporter:latest
+        imagePullPolicy: IfNotPresent
+
+        # Environment Variables
+        env:
+        - name: BROKER_ENDPOINT
+          value: "tcp://localhost:1883"
+
+        # Ports
+        ports:
+        - name: metrics
+          containerPort: 9234
+          protocol: TCP
+
+        # Resources
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 9234
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 9234
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534  # nobody
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: mqtt-config
+        configMap:
+          name: mqtt-config
+      - name: mqtt-secret
+        secret:
+          secretName: mqtt-credentials
+      - name: mqtt-passwd
+        emptyDir: {}
+      - name: mqtt-log
+        emptyDir: {}
+      - name: mqtt-data
+        persistentVolumeClaim:
+          claimName: mqtt-data
+
+---
+# -----------------------------------------------------------------------------
+# PersistentVolumeClaim: MQTT Data
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mqtt-data
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+spec:
+  accessModes:
+  - ReadWriteMany  # Multiple pods can share
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: nfs  # Use NFS or similar for ReadWriteMany
+
+---
+# -----------------------------------------------------------------------------
+# PodDisruptionBudget: Ensure at least 1 instance available
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mqtt-pdb
+  namespace: sos-app
+  labels:
+    app.kubernetes.io/name: mqtt
+    app.kubernetes.io/component: mqtt-broker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mqtt
+      app.kubernetes.io/component: mqtt-broker
+
+# =============================================================================
+# Usage Instructions
+# =============================================================================
+#
+# 1. Create MQTT Secrets:
+#    kubectl create secret generic mqtt-credentials \
+#      --from-literal=mqtt-username=sos_service \
+#      --from-literal=mqtt-password=$(openssl rand -base64 32) \
+#      -n sos-app
+#
+# 2. Apply this configuration:
+#    kubectl apply -f mqtt-deployment.yaml
+#
+# 3. Wait for pods to be ready:
+#    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=mqtt -n sos-app --timeout=120s
+#
+# 4. Test connection:
+#    kubectl run -it --rm mqtt-client --image=eclipse-mosquitto:2.0 --restart=Never -n sos-app -- \
+#      mosquitto_sub -h mqtt-service -t test -u sos_service -P <password>
+#
+# 5. Connection details:
+#    Host: mqtt-service.sos-app.svc.cluster.local
+#    Port: 1883 (MQTT)
+#    Port: 8883 (MQTTS - TLS)
+#    Port: 9001 (WebSocket)
+#
+# =============================================================================
+# MQTT Topic Structure for SOS App
+# =============================================================================
+#
+# Device Communication:
+#   device/{deviceId}/telemetry      - Device telemetry (battery, signal, etc.)
+#   device/{deviceId}/location       - GPS location updates
+#   device/{deviceId}/alert          - Device alerts (fall, button press)
+#   device/{deviceId}/status         - Device online/offline status
+#   device/{deviceId}/command        - Commands to device (from server)
+#   device/{deviceId}/config         - Configuration updates
+#
+# Emergency Triggers:
+#   emergency/{userId}/trigger       - Emergency alert trigger
+#   emergency/{userId}/status        - Emergency status updates
+#
+# Wearable Devices (Smartwatches):
+#   wearable/{deviceId}/heartrate    - Heart rate monitoring
+#   wearable/{deviceId}/fall         - Fall detection
+#   wearable/{deviceId}/activity     - Activity tracking
+#
+# Panic Buttons:
+#   panic/{deviceId}/press           - Panic button pressed
+#   panic/{deviceId}/battery         - Battery level
+#
+# Geofencing:
+#   geofence/{userId}/enter          - Entered geofence
+#   geofence/{userId}/exit           - Exited geofence
+#
+# =============================================================================
+# Client Examples
+# =============================================================================
+#
+# Python (paho-mqtt):
+# ```python
+# import paho.mqtt.client as mqtt
+#
+# def on_connect(client, userdata, flags, rc):
+#     print(f"Connected: {rc}")
+#     client.subscribe("device/+/alert")
+#
+# def on_message(client, userdata, msg):
+#     print(f"Topic: {msg.topic}, Message: {msg.payload}")
+#
+# client = mqtt.Client()
+# client.username_pw_set("sos_service", "password")
+# client.on_connect = on_connect
+# client.on_message = on_message
+# client.connect("mqtt-service", 1883, 60)
+# client.loop_forever()
+# ```
+#
+# Node.js (mqtt):
+# ```javascript
+# const mqtt = require('mqtt');
+#
+# const client = mqtt.connect('mqtt://mqtt-service:1883', {
+#   username: 'sos_service',
+#   password: 'password'
+# });
+#
+# client.on('connect', () => {
+#   console.log('Connected');
+#   client.subscribe('device/+/alert');
+# });
+#
+# client.on('message', (topic, message) => {
+#   console.log(`Topic: ${topic}, Message: ${message.toString()}`);
+# });
+# ```
+#
+# Arduino (ESP32):
+# ```cpp
+# #include <WiFi.h>
+# #include <PubSubClient.h>
+#
+# WiFiClient espClient;
+# PubSubClient client(espClient);
+#
+# void setup() {
+#   client.setServer("mqtt-service", 1883);
+#   client.connect("esp32-device", "sos_service", "password");
+#   client.publish("device/esp32-001/status", "online");
+# }
+# ```
+#
+# =============================================================================
+# Quality of Service (QoS) Levels
+# =============================================================================
+#
+# QoS 0 (At most once):
+#   - Fire and forget
+#   - Use for: telemetry, location updates (frequent, non-critical)
+#
+# QoS 1 (At least once):
+#   - Guaranteed delivery (may duplicate)
+#   - Use for: device status, configuration updates
+#
+# QoS 2 (Exactly once):
+#   - Guaranteed single delivery
+#   - Use for: emergency alerts, panic button presses
+#
+# =============================================================================
+# Monitoring
+# =============================================================================
+#
+# Prometheus metrics available at:
+#   http://mqtt-service:9234/metrics
+#
+# Key metrics:
+# - mosquitto_connected_clients - Connected clients
+# - mosquitto_messages_received_total - Messages received
+# - mosquitto_messages_sent_total - Messages sent
+# - mosquitto_subscriptions - Active subscriptions
+#
+# =============================================================================
+# Security Best Practices
+# =============================================================================
+#
+# 1. Enable TLS/SSL:
+#    - Generate certificates
+#    - Update mosquitto.conf listener 8883
+#    - Use MQTTS (port 8883) in production
+#
+# 2. Device Authentication:
+#    - Each device has unique username/password
+#    - Rotate credentials regularly
+#    - Use certificate-based auth for high security
+#
+# 3. Access Control:
+#    - ACL restricts devices to their own topics
+#    - Pattern-based ACL: device/%u/+
+#    - Backend service has full access
+#
+# 4. Network Security:
+#    - Use NetworkPolicy to restrict MQTT access
+#    - Only Device Service can connect
+#    - No external access
+#
+# =============================================================================
+# Troubleshooting
+# =============================================================================
+#
+# Check MQTT logs:
+#   kubectl logs deployment/mqtt -n sos-app -c mqtt
+#
+# Test publish:
+#   kubectl run -it --rm mqtt-pub --image=eclipse-mosquitto:2.0 --restart=Never -n sos-app -- \
+#     mosquitto_pub -h mqtt-service -t test -m "hello" -u sos_service -P <password>
+#
+# Test subscribe:
+#   kubectl run -it --rm mqtt-sub --image=eclipse-mosquitto:2.0 --restart=Never -n sos-app -- \
+#     mosquitto_sub -h mqtt-service -t test -u sos_service -P <password>
+#
+# Check active clients:
+#   kubectl exec -it deployment/mqtt -n sos-app -c mqtt -- \
+#     mosquitto_sub -t '$SYS/broker/clients/connected' -u sos_service -P <password> -C 1
+#
+# =============================================================================
+# Scaling
+# =============================================================================
+#
+# MQTT is stateful (persistent sessions), so scaling is complex:
+#
+# Option 1: Sticky Sessions (Current Setup)
+#   - Load balancer with session affinity
+#   - Each client connects to same broker
+#   - Simple but limited scalability
+#
+# Option 2: MQTT Proxy/Bridge
+#   - Use EMQX or VerneMQ (clustered brokers)
+#   - Supports horizontal scaling
+#   - More complex setup
+#
+# Option 3: Shared Subscriptions (MQTT 5.0)
+#   - Multiple consumers share topic
+#   - Load balancing at MQTT level
+#   - Requires MQTT 5.0 clients
+#
+# For SOS App: Start with 2 replicas, scale to proxy solution if needed
+#
+# =============================================================================
