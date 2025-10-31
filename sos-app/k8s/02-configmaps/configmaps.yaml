@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-config
+  namespace: sos-app
+data:
+  NODE_ENV: "development"
+  LOG_LEVEL: "debug"
+  CORS_ORIGINS: "http://localhost:8080"
+  CIRCUIT_BREAKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-hosts
+  namespace: sos-app
+data:
+  POSTGRES_AUTH_HOST: "postgres-auth"
+  POSTGRES_AUTH_PORT: "5432"
+  POSTGRES_USER_HOST: "postgres-user"
+  POSTGRES_USER_PORT: "5432"
+  MONGODB_HOST: "mongodb"
+  MONGODB_PORT: "27017"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  KAFKA_BROKERS: "kafka:9092"
+  ZOOKEEPER_HOST: "zookeeper:2181"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-urls
+  namespace: sos-app
+data:
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  USER_SERVICE_URL: "http://user-service:3002"
+  EMERGENCY_SERVICE_URL: "http://emergency-service:3003"
+  LOCATION_SERVICE_URL: "http://location-service:3004"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:3005"
+  COMMUNICATION_SERVICE_URL: "http://communication-service:3006"

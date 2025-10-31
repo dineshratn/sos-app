@@ -1,17 +1,13 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import passport from 'passport';
 import config from './config';
 import logger from './utils/logger';
 import { connectDatabase, syncDatabase, closeDatabase } from './db';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import authRoutes from './routes/auth.routes';
-import oauthRoutes from './routes/oauth.routes';
-import redisService from './services/redis.service';
-import { configureGoogleStrategy } from './strategies/google.strategy';
-import { configureAppleStrategy } from './strategies/apple.strategy';
+import profileRoutes from './routes/profile.routes';
+import emergencyContactRoutes from './routes/emergencyContact.routes';
 
 const app: Application = express();
 
@@ -21,8 +17,8 @@ app.use(helmet());
 // CORS configuration
 app.use(cors({
   origin: config.cors.origins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  credentials: config.cors.credentials,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -45,15 +41,8 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Initialize Passport for OAuth
-app.use(passport.initialize());
-
-// Configure OAuth strategies
-configureGoogleStrategy();
-configureAppleStrategy();
-
 // Request logging middleware
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
     userAgent: req.get('user-agent'),
@@ -62,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoints
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: config.serviceName,
@@ -72,7 +61,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/health/startup', (req, res) => {
+app.get('/health/startup', (req: Request, res: Response) => {
   res.json({
     status: 'started',
     service: config.serviceName,
@@ -80,9 +69,10 @@ app.get('/health/startup', (req, res) => {
   });
 });
 
-app.get('/health/ready', async (req, res) => {
+app.get('/health/ready', async (req: Request, res: Response) => {
   try {
-    // TODO: Add database health check
+    // Check database connection
+    await connectDatabase();
     res.json({
       status: 'ready',
       service: config.serviceName,
@@ -98,7 +88,7 @@ app.get('/health/ready', async (req, res) => {
   }
 });
 
-app.get('/health/live', (req, res) => {
+app.get('/health/live', (req: Request, res: Response) => {
   res.json({
     status: 'alive',
     service: config.serviceName,
@@ -107,11 +97,11 @@ app.get('/health/live', (req, res) => {
 });
 
 // Root endpoint
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   res.json({
     service: config.serviceName,
     version: '1.0.0',
-    description: 'SOS App Authentication Service - JWT, OAuth 2.0, MFA',
+    description: 'SOS App User Service - User profiles and emergency contacts',
     endpoints: {
       health: '/health',
       startup: '/health/startup',
@@ -124,8 +114,8 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/auth', oauthRoutes);
+app.use('/api/v1/users/profile', profileRoutes);
+app.use('/api/v1/users/emergency-contacts', emergencyContactRoutes);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -138,9 +128,6 @@ const gracefulShutdown = async (signal: string) => {
   logger.info(`${signal} received, starting graceful shutdown...`);
 
   try {
-    // Close Redis connection
-    await redisService.close();
-
     // Close database connection
     await closeDatabase();
 
@@ -184,7 +171,7 @@ const startServer = async () => {
       logger.info(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║   🔐  SOS App Authentication Service                     ║
+║   👤  SOS App User Service                               ║
 ║                                                           ║
 ║   Environment: ${config.nodeEnv.padEnd(42)}║
 ║   Port: ${config.port.toString().padEnd(50)}║
