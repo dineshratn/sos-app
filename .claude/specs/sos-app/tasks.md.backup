@@ -207,14 +207,14 @@ This implementation plan breaks down the SOS App development into atomic, agent-
 
 #### 2.1 Authentication Service
 
-- [x] 21. Create Auth Service project structure
+- [ ] 21. Create Auth Service project structure
   - Files: services/auth-service/package.json, services/auth-service/tsconfig.json, services/auth-service/src/index.ts
   - Set up Express.js server with TypeScript
   - Configure logger, error handler, health check endpoint
   - Purpose: Initialize Auth Service foundation
   - _Requirements: 1.0 (User Registration and Authentication)_
 
-- [x] 22. Create User model and database schema
+- [ ] 22. Create User model and database schema
   - File: services/auth-service/src/models/User.ts
   - Define User interface with fields: id, email, phoneNumber, passwordHash, authProvider, mfaEnabled
   - Create Sequelize/TypeORM model with validation rules
@@ -229,7 +229,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Create users table in PostgreSQL database
   - _Requirements: 1.0_
 
-- [x] 24. Create Session model and database schema
+- [ ] 24. Create Session model and database schema
   - File: services/auth-service/src/models/Session.ts
   - Define Session interface: userId, deviceId, refreshToken, expiresAt
   - Create model with foreign key to users table
@@ -243,7 +243,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Create sessions table for token management
   - _Requirements: 1.0.3_
 
-- [x] 26. Implement password hashing utility
+- [ ] 26. Implement password hashing utility
   - File: services/auth-service/src/utils/password.ts
   - Use bcrypt with 10 rounds for password hashing
   - Add compare function for password validation
@@ -251,7 +251,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: bcrypt npm package_
   - _Requirements: 1.0.2, Security NFR_
 
-- [x] 27. Implement JWT token generation utility
+- [ ] 27. Implement JWT token generation utility
   - File: services/auth-service/src/utils/jwt.ts
   - Generate access tokens (15 min expiry) and refresh tokens (7 days)
   - Sign tokens with RS256 algorithm using private key
@@ -259,42 +259,42 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: jsonwebtoken npm package_
   - _Requirements: 1.0.3, Security NFR_
 
-- [x] 28. Implement JWT token validation middleware
+- [ ] 28. Implement JWT token validation middleware
   - File: services/auth-service/src/middleware/validateToken.ts
   - Verify JWT signature using public key
   - Check token expiration and blacklist status
   - Purpose: Protect routes with token validation
   - _Requirements: 1.0.3_
 
-- [x] 29. Create registration endpoint
+- [ ] 29. Create registration endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/register)
   - Validate email/phone uniqueness, hash password, create user record
   - Return user object without password hash
   - Purpose: Allow new users to register with email/password
   - _Requirements: 1.0.1_
 
-- [x] 30. Create login endpoint
+- [ ] 30. Create login endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/login)
   - Validate credentials, generate JWT tokens, create session
   - Return access token, refresh token, and user profile
   - Purpose: Authenticate existing users and issue tokens
   - _Requirements: 1.0.3_
 
-- [x] 31. Create token refresh endpoint
+- [ ] 31. Create token refresh endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/refresh)
   - Validate refresh token, check session, issue new access token
   - Rotate refresh token for security
   - Purpose: Allow clients to refresh expired access tokens
   - _Requirements: 1.0.3_
 
-- [x] 32. Create logout endpoint
+- [ ] 32. Create logout endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/logout)
   - Revoke refresh token, delete session, add token to blacklist
   - Return success response
   - Purpose: Invalidate user session on logout
   - _Requirements: 1.0.3_
 
-- [x] 33. Implement OAuth 2.0 Google authentication strategy
+- [ ] 33. Implement OAuth 2.0 Google authentication strategy
   - File: services/auth-service/src/strategies/google.strategy.ts
   - Configure Passport.js Google OAuth strategy
   - Handle OAuth callback, create/update user, issue tokens
@@ -302,7 +302,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: passport-google-oauth20 npm package_
   - _Requirements: 1.0.1 (social authentication)_
 
-- [x] 34. Implement OAuth 2.0 Apple authentication strategy
+- [ ] 34. Implement OAuth 2.0 Apple authentication strategy
   - File: services/auth-service/src/strategies/apple.strategy.ts
   - Configure Passport.js Apple OAuth strategy
   - Handle OAuth callback, create/update user, issue tokens
@@ -346,7 +346,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Enforce MFA during login process
   - _Requirements: Security NFR - MFA_
 
-- [x] 40. Write unit tests for Auth Service
+- [ ] 40. Write unit tests for Auth Service
   - File: services/auth-service/tests/auth.service.test.ts
   - Test registration, login, token refresh, logout flows
   - Mock database and external dependencies
@@ -582,14 +582,14 @@ This implementation plan breaks down the SOS App development into atomic, agent-
 
 #### 3.1 Emergency Service (Go)
 
-- [x] 73. Create Emergency Service project structure in Go
+- [ ] 73. Create Emergency Service project structure in Go
   - Files: services/emergency-service/main.go, services/emergency-service/go.mod
   - Initialize Go module, set up HTTP server with gorilla/mux
   - Configure logger (zerolog), CORS, graceful shutdown
   - Purpose: Initialize Emergency Service foundation in Go
   - _Requirements: 2.0 (Emergency Alert Triggering)_
 
-- [x] 74. Create Emergency struct and model
+- [ ] 74. Create Emergency struct and model
   - File: services/emergency-service/internal/models/emergency.go
   - Define Emergency struct with fields: ID, UserID, Type, Status, Location, CreatedAt, etc.
   - Add JSON tags for serialization
@@ -603,7 +603,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Create emergencies table in PostgreSQL
   - _Requirements: 2.0_
 
-- [x] 76. Create database repository for Emergency
+- [ ] 76. Create database repository for Emergency
   - File: services/emergency-service/internal/repository/emergency_repository.go
   - Implement Create, GetByID, GetByUserID, Update, Delete methods
   - Use pgx/v5 for PostgreSQL connection
@@ -611,7 +611,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: pgx Go library_
   - _Requirements: 2.0_
 
-- [x] 77. Create EmergencyAcknowledgment struct and model
+- [ ] 77. Create EmergencyAcknowledgment struct and model
   - File: services/emergency-service/internal/models/acknowledgment.go
   - Define struct: EmergencyID, ContactID, ContactName, AcknowledgedAt, Location, Message
   - Purpose: Track emergency contact acknowledgments
@@ -624,7 +624,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Create acknowledgments table
   - _Requirements: 4.0.4_
 
-- [x] 79. Implement Kafka producer for emergency events
+- [ ] 79. Implement Kafka producer for emergency events
   - File: services/emergency-service/internal/kafka/producer.go
   - Set up Kafka producer with confluent-kafka-go
   - Implement PublishEmergencyCreated, PublishEmergencyResolved methods
@@ -632,7 +632,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: confluent-kafka-go library_
   - _Requirements: 2.0, Event-driven architecture_
 
-- [x] 80. Implement Kafka consumer for acknowledgment events
+- [ ] 80. Implement Kafka consumer for acknowledgment events
   - File: services/emergency-service/internal/kafka/consumer.go
   - Set up Kafka consumer for contact-acknowledged topic
   - Handle ContactAcknowledged events, update database
@@ -647,7 +647,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Initiate emergency alert with countdown
   - _Requirements: 2.0.1, 2.0.5_
 
-- [x] 82. Implement countdown timer logic
+- [ ] 82. Implement countdown timer logic
   - File: services/emergency-service/internal/services/countdown_service.go
   - Use time.AfterFunc to schedule countdown completion
   - If not cancelled, update status to ACTIVE, publish EmergencyCreated event
@@ -690,7 +690,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Record emergency contact acknowledgment
   - _Requirements: 4.0.4_
 
-- [x] 88. Implement escalation logic service
+- [ ] 88. Implement escalation logic service
   - File: services/emergency-service/internal/services/escalation_service.go
   - Start goroutine on emergency activation to monitor acknowledgments
   - If no primary contact acknowledges in 2 minutes, trigger secondary notification
@@ -705,7 +705,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Allow IoT devices to trigger emergencies automatically
   - _Requirements: 7.0.2_
 
-- [x] 90. Write unit tests for Emergency Service
+- [ ] 90. Write unit tests for Emergency Service
   - File: services/emergency-service/internal/handlers/emergency_handler_test.go
   - Test trigger, cancel, resolve, acknowledge flows
   - Test countdown timer and escalation logic
@@ -829,27 +829,27 @@ This implementation plan breaks down the SOS App development into atomic, agent-
 
 #### 3.3 Notification Service
 
-- [x] 106. Create Notification Service project structure
+- [ ] 106. Create Notification Service project structure
   - Files: services/notification-service/package.json, services/notification-service/src/index.ts
   - Set up Express.js server, Bull queue for job processing
   - Configure Redis connection for queue storage
   - Purpose: Initialize multi-channel Notification Service
   - _Requirements: 11.0 (Notifications and Alerts)_
 
-- [x] 107. Create Notification model
+- [ ] 107. Create Notification model
   - File: services/notification-service/src/models/Notification.ts
   - Define: id, emergencyId, recipientId, channel (PUSH/SMS/EMAIL), status, sentAt, deliveredAt
   - Purpose: Track notification delivery status
   - _Requirements: 11.0_
 
-- [x] 108. Create MongoDB collection for notifications
+- [ ] 108. Create MongoDB collection for notifications
   - File: services/notification-service/src/db/schemas/notification.schema.ts
   - Define Mongoose schema for notifications
   - Add indexes on emergencyId and status
   - Purpose: Store notification logs in MongoDB
   - _Requirements: 11.0_
 
-- [x] 109. Create Bull queue for notification jobs
+- [ ] 109. Create Bull queue for notification jobs
   - File: services/notification-service/src/queues/notification.queue.ts
   - Set up Bull queue with Redis connection
   - Configure job retry logic: 3 attempts, exponential backoff
@@ -857,7 +857,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: bull npm package_
   - _Requirements: 11.0, Reliability NFR_
 
-- [x] 110. Implement FCM (Firebase Cloud Messaging) provider
+- [ ] 110. Implement FCM (Firebase Cloud Messaging) provider
   - File: services/notification-service/src/providers/fcm.provider.ts
   - Initialize Firebase Admin SDK with service account credentials
   - Implement sendPushNotification method for Android
@@ -866,7 +866,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: firebase-admin npm package_
   - _Requirements: 11.0.1, 11.0.2_
 
-- [x] 111. Implement APNs (Apple Push Notification) provider
+- [ ] 111. Implement APNs (Apple Push Notification) provider
   - File: services/notification-service/src/providers/apns.provider.ts
   - Initialize node-apn with Apple certificates
   - Implement sendPushNotification with interruption-level=critical
@@ -874,7 +874,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: node-apn npm package_
   - _Requirements: 11.0.1, 11.0.5_
 
-- [x] 112. Implement Twilio SMS provider
+- [ ] 112. Implement Twilio SMS provider
   - File: services/notification-service/src/providers/sms.provider.ts
   - Initialize Twilio client with account SID and auth token
   - Implement sendSMS method with emergency template
@@ -882,7 +882,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: twilio npm package_
   - _Requirements: 11.0.2, 11.0.6_
 
-- [x] 113. Implement SendGrid email provider
+- [ ] 113. Implement SendGrid email provider
   - File: services/notification-service/src/providers/email.provider.ts
   - Initialize SendGrid client with API key
   - Implement sendEmail with rich HTML template
@@ -890,14 +890,14 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: @sendgrid/mail npm package_
   - _Requirements: 11.0.2_
 
-- [x] 114. Create Kafka consumer for emergency events
+- [ ] 114. Create Kafka consumer for emergency events
   - File: services/notification-service/src/kafka/consumer.ts
   - Subscribe to emergency-created topic
   - On event, enqueue notification jobs for all emergency contacts
   - Purpose: Trigger notifications when emergency is created
   - _Requirements: 11.0.1_
 
-- [x] 115. Implement notification dispatcher service
+- [ ] 115. Implement notification dispatcher service
   - File: services/notification-service/src/services/notification.service.ts
   - Method: dispatchEmergencyAlert(emergency, contacts)
   - Enqueue jobs for push, SMS, email for each contact
@@ -905,7 +905,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Orchestrate multi-channel notification delivery
   - _Requirements: 11.0.1, 11.0.2, 11.0.3_
 
-- [x] 116. Implement notification job processor
+- [ ] 116. Implement notification job processor
   - File: services/notification-service/src/workers/notification.worker.ts
   - Process jobs from Bull queue
   - Call appropriate provider based on channel
@@ -913,14 +913,14 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Execute notification delivery jobs
   - _Requirements: 11.0_
 
-- [x] 117. Implement notification retry logic
+- [ ] 117. Implement notification retry logic
   - File: services/notification-service/src/services/retry.service.ts
   - On push failure, immediately enqueue SMS job
   - On all failures, retry after delays: 5s, 15s, 45s
   - Purpose: Ensure notifications are delivered via fallback channels
   - _Requirements: 11.0.2, Reliability NFR_
 
-- [x] 118. Implement escalation notification service
+- [ ] 118. Implement escalation notification service
   - File: services/notification-service/src/services/escalation.service.ts
   - Listen for escalation events from Emergency Service
   - Send notifications to secondary contacts
