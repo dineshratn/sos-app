@@ -112,10 +112,11 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-// TODO: Add user profile routes
-// TODO: Add emergency contact routes
-// app.use('/api/v1/users', userRoutes);
-// app.use('/api/v1/contacts', contactRoutes);
+import userRoutes from './routes/user.routes';
+import contactRoutes from './routes/contacts.routes';
+
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/contacts', contactRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

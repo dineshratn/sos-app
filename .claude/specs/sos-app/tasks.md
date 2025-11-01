@@ -390,49 +390,49 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Create emergency contacts table
   - _Requirements: 4.0.1_
 
-- [ ] 46. Create GET user profile endpoint
+- [x] 46. Create GET user profile endpoint
   - File: services/user-service/src/routes/user.routes.ts (GET /api/v1/users/me)
   - Retrieve user profile by userId from JWT token
   - Return profile with emergency contacts (summary)
   - Purpose: Allow users to view their profile
   - _Requirements: 1.0.5_
 
-- [ ] 47. Create UPDATE user profile endpoint
+- [x] 47. Create UPDATE user profile endpoint
   - File: services/user-service/src/routes/user.routes.ts (PUT /api/v1/users/me)
   - Validate input, update user profile fields
   - Return updated profile
   - Purpose: Allow users to edit their profile
   - _Requirements: 1.0.5_
 
-- [ ] 48. Create DELETE user account endpoint
+- [x] 48. Create DELETE user account endpoint
   - File: services/user-service/src/routes/user.routes.ts (DELETE /api/v1/users/me)
   - Soft delete user (set deletedAt timestamp)
   - Publish UserDeleted event to Kafka for cleanup
   - Purpose: Implement right to be forgotten (GDPR compliance)
   - _Requirements: Security NFR - Privacy (GDPR)_
 
-- [ ] 49. Create GET emergency contacts endpoint
+- [x] 49. Create GET emergency contacts endpoint
   - File: services/user-service/src/routes/contacts.routes.ts (GET /api/v1/contacts)
   - Retrieve all emergency contacts for authenticated user
   - Order by priority (PRIMARY, SECONDARY, TERTIARY)
   - Purpose: List user's emergency contacts
   - _Requirements: 4.0.1_
 
-- [ ] 50. Create POST emergency contact endpoint
+- [x] 50. Create POST emergency contact endpoint
   - File: services/user-service/src/routes/contacts.routes.ts (POST /api/v1/contacts)
   - Validate phone/email format, create contact record
   - Limit to 100 contacts per user
   - Purpose: Add new emergency contact
   - _Requirements: 4.0.1_
 
-- [ ] 51. Create PUT emergency contact endpoint
+- [x] 51. Create PUT emergency contact endpoint
   - File: services/user-service/src/routes/contacts.routes.ts (PUT /api/v1/contacts/:id)
   - Require re-authentication before allowing updates
   - Validate ownership, update contact fields
   - Purpose: Edit existing emergency contact
   - _Requirements: 4.0.5_
 
-- [ ] 52. Create DELETE emergency contact endpoint
+- [x] 52. Create DELETE emergency contact endpoint
   - File: services/user-service/src/routes/contacts.routes.ts (DELETE /api/v1/contacts/:id)
   - Require re-authentication before deletion
   - Validate ownership, soft delete contact
@@ -447,7 +447,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: libphonenumber-js npm package_
   - _Requirements: 4.0.6_
 
-- [ ] 54. Write unit tests for User Service
+- [x] 54. Write unit tests for User Service
   - File: services/user-service/tests/user.service.test.ts
   - Test profile CRUD, contact management, validation logic
   - Mock database and auth dependencies
