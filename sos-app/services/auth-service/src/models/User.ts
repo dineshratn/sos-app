@@ -38,6 +38,8 @@ export interface UserAttributes {
   lastLoginAt?: Date;
   failedLoginAttempts: number;
   accountLockedUntil?: Date;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -121,6 +123,12 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Column(DataType.DATE)
   accountLockedUntil?: Date;
+
+  @Column(DataType.STRING(255))
+  passwordResetToken?: string;
+
+  @Column(DataType.DATE)
+  passwordResetExpires?: Date;
 
   @CreatedAt
   createdAt!: Date;

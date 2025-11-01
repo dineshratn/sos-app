@@ -222,7 +222,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: sequelize or typeorm npm package_
   - _Requirements: 1.0.1, 1.0.2_
 
-- [ ] 23. Create database migration for users table
+- [x] 23. Create database migration for users table
   - File: services/auth-service/src/migrations/001_create_users_table.ts
   - SQL: CREATE TABLE users with columns matching User model
   - Add indexes on email and phoneNumber for fast lookups
@@ -236,7 +236,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Track user sessions for token refresh and revocation
   - _Requirements: 1.0.3_
 
-- [ ] 25. Create database migration for sessions table
+- [x] 25. Create database migration for sessions table
   - File: services/auth-service/src/migrations/002_create_sessions_table.ts
   - SQL: CREATE TABLE sessions with foreign key to users table
   - Add index on userId and refreshToken for fast lookups
@@ -310,21 +310,21 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: passport-apple npm package_
   - _Requirements: 1.0.1 (social authentication)_
 
-- [ ] 35. Create password reset request endpoint
+- [x] 35. Create password reset request endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/password-reset-request)
   - Generate password reset token, send email with reset link
   - Store token with expiration (1 hour) in database
   - Purpose: Initiate password reset flow
   - _Requirements: 1.0.4_
 
-- [ ] 36. Create password reset confirmation endpoint
+- [x] 36. Create password reset confirmation endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/password-reset)
   - Validate reset token, hash new password, update user
   - Invalidate all existing sessions for security
   - Purpose: Complete password reset flow
   - _Requirements: 1.0.4_
 
-- [ ] 37. Implement MFA enrollment endpoint
+- [x] 37. Implement MFA enrollment endpoint
   - File: services/auth-service/src/routes/mfa.routes.ts (POST /api/v1/auth/mfa/enroll)
   - Generate TOTP secret using speakeasy
   - Return QR code for authenticator app
@@ -332,14 +332,14 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - _Leverage: speakeasy, qrcode npm packages_
   - _Requirements: Security NFR - MFA_
 
-- [ ] 38. Implement MFA verification endpoint
+- [x] 38. Implement MFA verification endpoint
   - File: services/auth-service/src/routes/mfa.routes.ts (POST /api/v1/auth/mfa/verify)
   - Validate TOTP code against user's secret
   - Enable MFA on user account if code is valid
   - Purpose: Complete MFA enrollment after verification
   - _Requirements: Security NFR - MFA_
 
-- [ ] 39. Create MFA login challenge endpoint
+- [x] 39. Create MFA login challenge endpoint
   - File: services/auth-service/src/routes/auth.routes.ts (POST /api/v1/auth/mfa/challenge)
   - Verify TOTP code during login for MFA-enabled users
   - Issue tokens only after successful MFA verification

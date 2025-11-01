@@ -7,6 +7,7 @@ import logger from './utils/logger';
 import { connectDatabase, syncDatabase, closeDatabase } from './db';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
+import mfaRoutes from './routes/mfa.routes';
 import redisService from './services/redis.service';
 
 const app: Application = express();
@@ -114,6 +115,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth/mfa', mfaRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

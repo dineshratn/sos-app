@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import authService from '../services/auth.service';
+import passwordResetService from '../services/password-reset.service';
 import { validateToken } from '../middleware/validateToken';
 import {
   registerValidation,
@@ -212,6 +213,97 @@ router.get(
         sessions: sessions.map((s) => s.toSafeObject()),
         count: sessions.length,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   POST /api/v1/auth/password-reset-request
+ * @desc    Request password reset - generates token and sends email
+ * @access  Public
+ */
+router.post(
+  '/password-reset-request',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: 'Email is required',
+          code: 'EMAIL_REQUIRED',
+        });
+        return;
+      }
+
+      const result = await passwordResetService.requestPasswordReset(email);
+
+      logger.info(`Password reset requested for email: ${email}`);
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   POST /api/v1/auth/password-reset
+ * @desc    Confirm password reset with token and new password
+ * @access  Public
+ */
+router.post(
+  '/password-reset',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        res.status(400).json({
+          success: false,
+          error: 'Token and new password are required',
+          code: 'MISSING_FIELDS',
+        });
+        return;
+      }
+
+      if (newPassword.length < 8) {
+        res.status(400).json({
+          success: false,
+          error: 'Password must be at least 8 characters long',
+          code: 'WEAK_PASSWORD',
+        });
+        return;
+      }
+
+      const result = await passwordResetService.confirmPasswordReset(token, newPassword);
+
+      logger.info(`Password reset completed for token: ${token.substring(0, 10)}...`);
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route   GET /api/v1/auth/validate-reset-token/:token
+ * @desc    Validate password reset token
+ * @access  Public
+ */
+router.get(
+  '/validate-reset-token/:token',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { token } = req.params;
+
+      const result = await passwordResetService.validateResetToken(token);
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
