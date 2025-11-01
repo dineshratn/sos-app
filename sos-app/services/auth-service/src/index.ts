@@ -9,9 +9,10 @@ import { connectDatabase, syncDatabase, closeDatabase } from './db';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import oauthRoutes from './routes/oauth.routes';
+import mfaRoutes from './routes/mfa.routes';
 import redisService from './services/redis.service';
 import { configureGoogleStrategy } from './strategies/google.strategy';
-import { configureAppleStrategy } from './strategies/apple.strategy';
+// import { configureAppleStrategy } from './strategies/apple.strategy'; // Temporarily disabled
 
 const app: Application = express();
 
@@ -50,7 +51,7 @@ app.use(passport.initialize());
 
 // Configure OAuth strategies
 configureGoogleStrategy();
-configureAppleStrategy();
+// configureAppleStrategy(); // Temporarily disabled
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -126,6 +127,7 @@ app.get('/', (req, res) => {
 // API Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/auth', oauthRoutes);
+app.use('/api/v1/auth/mfa', mfaRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

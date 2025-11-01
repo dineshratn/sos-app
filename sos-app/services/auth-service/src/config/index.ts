@@ -9,6 +9,7 @@ interface Config {
   nodeEnv: string;
   port: number;
   serviceName: string;
+  frontendUrl: string;
 
   // Database
   database: {
@@ -103,6 +104,7 @@ const config: Config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '8081', 10),
   serviceName: process.env.SERVICE_NAME || 'auth-service',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 
   database: {
     host: process.env.DB_HOST || 'localhost',

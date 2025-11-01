@@ -70,13 +70,13 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
   @PrimaryKey
   @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
-  id: string;
+  id!: string;
 
   @Unique
   @AllowNull(false)
   @Index
   @Column(DataType.STRING(255))
-  email: string;
+  email!: string;
 
   @Unique
   @Index
@@ -88,7 +88,7 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Default(AuthProvider.LOCAL)
   @Column(DataType.ENUM(...Object.values(AuthProvider)))
-  authProvider: AuthProvider;
+  authProvider!: AuthProvider;
 
   @Column(DataType.STRING(255))
   providerId?: string;
@@ -101,7 +101,7 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  mfaEnabled: boolean;
+  mfaEnabled!: boolean;
 
   @Column(DataType.STRING(255))
   mfaSecret?: string;
@@ -114,27 +114,27 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  emailVerified: boolean;
+  emailVerified!: boolean;
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  phoneVerified: boolean;
+  phoneVerified!: boolean;
 
   @Column(DataType.DATE)
   lastLoginAt?: Date;
 
   @Default(0)
   @Column(DataType.INTEGER)
-  failedLoginAttempts: number;
+  failedLoginAttempts!: number;
 
   @Column(DataType.DATE)
   accountLockedUntil?: Date;
 
   @CreatedAt
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdatedAt
-  updatedAt: Date;
+  updatedAt!: Date;
 
   @DeletedAt
   deletedAt?: Date;

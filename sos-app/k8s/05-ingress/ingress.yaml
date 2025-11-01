@@ -1,0 +1,76 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sos-app-ingress
+  namespace: sos-app
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: sos-app.local
+      http:
+        paths:
+          # API Gateway - Main entry point
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 3000
+
+          # Direct access to services (for debugging in development)
+          - path: /direct/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001
+
+          - path: /direct/user
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 3002
+
+          - path: /direct/emergency
+            pathType: Prefix
+            backend:
+              service:
+                name: emergency-service
+                port:
+                  number: 3003
+
+          - path: /direct/location
+            pathType: Prefix
+            backend:
+              service:
+                name: location-service
+                port:
+                  number: 3004
+
+          - path: /direct/notification
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 3005
+
+          - path: /direct/communication
+            pathType: Prefix
+            backend:
+              service:
+                name: communication-service
+                port:
+                  number: 3006
