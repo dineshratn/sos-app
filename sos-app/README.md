@@ -2,15 +2,17 @@
 
 ## ✅ What's Completed
 
-**6 Complete Microservices** (156/262 tasks - 60%):
+**8 Complete Microservices** (154/262 tasks - 59%):
 - ✅ Auth Service - JWT, MFA, OAuth authentication (Node.js)
 - ✅ User Service - Profiles & emergency contacts (Node.js)
 - ✅ Medical Service - HIPAA-compliant medical records (Node.js)
 - ✅ Emergency Service - Emergency alerts, countdown, escalation (Go)
 - ✅ Location Service - Real-time tracking, geofencing, TimescaleDB (Go)
 - ✅ Notification Service - Multi-channel alerts (Push, SMS, Email) (Node.js)
+- ✅ Communication Service - Real-time chat, media sharing, voice-to-text (Node.js)
+- ✅ Device Service - IoT device integration, fall detection, vital signs (Go)
 
-**19,000+ lines of production-ready code with 70%+ test coverage**
+**26,000+ lines of production-ready code with 70%+ test coverage**
 
 ---
 
@@ -50,6 +52,8 @@ minikube ip
 # http://<MINIKUBE_IP>:30004 (Emergency)
 # http://<MINIKUBE_IP>:30005 (Location)
 # http://<MINIKUBE_IP>:30006 (Notification)
+# http://<MINIKUBE_IP>:30007 (Communication)
+# http://<MINIKUBE_IP>:30008 (Device)
 
 # Run tests
 ./test-services-k8s.sh
@@ -103,6 +107,8 @@ Wait ~30 seconds for services to start. You'll see:
 - Emergency Service: http://localhost:8080/health
 - Location Service: http://localhost:8081/health
 - Notification Service: http://localhost:3005/health
+- Communication Service: http://localhost:3004/health
+- Device Service: http://localhost:8082/health
 
 **Minikube:**
 ```bash
@@ -116,6 +122,8 @@ MINIKUBE_IP=$(minikube ip)
 # http://${MINIKUBE_IP}:30004/health (Emergency)
 # http://${MINIKUBE_IP}:30005/health (Location)
 # http://${MINIKUBE_IP}:30006/health (Notification)
+# http://${MINIKUBE_IP}:30007/health (Communication)
+# http://${MINIKUBE_IP}:30008/health (Device)
 ```
 
 ---
@@ -179,12 +187,15 @@ minikube stop
 | Redis | 6379 | 🟢 |
 | MongoDB | 27017 | 🟢 |
 | Kafka + Zookeeper | 9092 | 🟢 |
+| MQTT Broker | 1883 | 🟢 |
 | Auth Service | 3001 | 🟢 |
 | User Service | 3002 | 🟢 |
 | Medical Service | 3003 | 🟢 |
 | Emergency Service | 8080 | 🟢 |
 | Location Service | 8081 | 🟢 |
 | Notification Service | 3005 | 🟢 |
+| Communication Service | 3004 | 🟢 |
+| Device Service | 8082 | 🟢 |
 
 ---
 
@@ -231,13 +242,13 @@ docker-compose down -v && docker-compose up --build
 
 ## 📈 Project Status
 
-- **Progress:** 156/262 tasks (60%)
-- **Code:** 19,000+ lines
+- **Progress:** 154/262 tasks (59%)
+- **Code:** 26,000+ lines
 - **Tests:** 70-80% coverage
-- **APIs:** 60+ endpoints
-- **Services:** 6 microservices (4 Node.js, 2 Go)
+- **APIs:** 80+ endpoints
+- **Services:** 8 microservices (5 Node.js, 3 Go)
 - **Docker:** Production-ready images
-- **Message Broker:** Kafka for event-driven architecture
+- **Message Brokers:** Kafka (event-driven), MQTT (IoT devices)
 
 ---
 

@@ -95,6 +95,14 @@ build_images() {
     docker build -t sos-app/notification-service:latest ./sos-app/services/notification-service
     print_success "Notification Service built"
 
+    print_info "Building Communication Service..."
+    docker build -t sos-app/communication-service:latest ./sos-app/services/communication-service
+    print_success "Communication Service built"
+
+    print_info "Building Device Service..."
+    docker build -t sos-app/device-service:latest ./sos-app/services/device-service
+    print_success "Device Service built"
+
     print_success "All images built successfully"
 }
 
@@ -125,7 +133,8 @@ deploy_k8s() {
     kubectl apply -f k8s/base/redis-deployment.yaml
     kubectl apply -f k8s/base/kafka-deployment.yaml
     kubectl apply -f k8s/base/mongodb-deployment.yaml
-    print_success "Databases and Kafka deployed"
+    kubectl apply -f k8s/base/mqtt-broker-deployment.yaml
+    print_success "Databases, Kafka, and MQTT broker deployed"
 
     # Wait for databases to be ready
     print_info "Waiting for databases to be ready..."
@@ -148,6 +157,8 @@ deploy_k8s() {
     kubectl apply -f k8s/base/emergency-service-deployment.yaml
     kubectl apply -f k8s/base/location-service-deployment.yaml
     kubectl apply -f k8s/base/notification-service-deployment.yaml
+    kubectl apply -f k8s/base/communication-service-deployment.yaml
+    kubectl apply -f k8s/base/device-service-deployment.yaml
     print_success "Microservices deployed"
 
     # Wait for services to be ready
@@ -158,6 +169,8 @@ deploy_k8s() {
     kubectl wait --for=condition=ready pod -l app=emergency-service -n sos-app --timeout=180s || true
     kubectl wait --for=condition=ready pod -l app=location-service -n sos-app --timeout=180s || true
     kubectl wait --for=condition=ready pod -l app=notification-service -n sos-app --timeout=180s || true
+    kubectl wait --for=condition=ready pod -l app=communication-service -n sos-app --timeout=180s || true
+    kubectl wait --for=condition=ready pod -l app=device-service -n sos-app --timeout=180s || true
     print_success "Microservices are ready"
 }
 
@@ -170,20 +183,24 @@ display_info() {
     echo -e "${GREEN}Your services are now running!${NC}\n"
 
     echo -e "${BLUE}Service URLs:${NC}"
-    echo -e "  Auth Service:         http://${MINIKUBE_IP}:30001"
-    echo -e "  User Service:         http://${MINIKUBE_IP}:30002"
-    echo -e "  Medical Service:      http://${MINIKUBE_IP}:30003"
-    echo -e "  Emergency Service:    http://${MINIKUBE_IP}:30004"
-    echo -e "  Location Service:     http://${MINIKUBE_IP}:30005"
-    echo -e "  Notification Service: http://${MINIKUBE_IP}:30006"
+    echo -e "  Auth Service:          http://${MINIKUBE_IP}:30001"
+    echo -e "  User Service:          http://${MINIKUBE_IP}:30002"
+    echo -e "  Medical Service:       http://${MINIKUBE_IP}:30003"
+    echo -e "  Emergency Service:     http://${MINIKUBE_IP}:30004"
+    echo -e "  Location Service:      http://${MINIKUBE_IP}:30005"
+    echo -e "  Notification Service:  http://${MINIKUBE_IP}:30006"
+    echo -e "  Communication Service: http://${MINIKUBE_IP}:30007"
+    echo -e "  Device Service:        http://${MINIKUBE_IP}:30008"
 
     echo -e "\n${BLUE}Health Check URLs:${NC}"
-    echo -e "  Auth:         http://${MINIKUBE_IP}:30001/health"
-    echo -e "  User:         http://${MINIKUBE_IP}:30002/health"
-    echo -e "  Medical:      http://${MINIKUBE_IP}:30003/health"
-    echo -e "  Emergency:    http://${MINIKUBE_IP}:30004/health"
-    echo -e "  Location:     http://${MINIKUBE_IP}:30005/health"
-    echo -e "  Notification: http://${MINIKUBE_IP}:30006/health"
+    echo -e "  Auth:          http://${MINIKUBE_IP}:30001/health"
+    echo -e "  User:          http://${MINIKUBE_IP}:30002/health"
+    echo -e "  Medical:       http://${MINIKUBE_IP}:30003/health"
+    echo -e "  Emergency:     http://${MINIKUBE_IP}:30004/health"
+    echo -e "  Location:      http://${MINIKUBE_IP}:30005/health"
+    echo -e "  Notification:  http://${MINIKUBE_IP}:30006/health"
+    echo -e "  Communication: http://${MINIKUBE_IP}:30007/health"
+    echo -e "  Device:        http://${MINIKUBE_IP}:30008/health"
 
     echo -e "\n${BLUE}Useful Commands:${NC}"
     echo -e "  View all pods:              kubectl get pods -n sos-app"
@@ -194,8 +211,11 @@ display_info() {
     echo -e "  View logs (emergency):      kubectl logs -f -l app=emergency-service -n sos-app"
     echo -e "  View logs (location):       kubectl logs -f -l app=location-service -n sos-app"
     echo -e "  View logs (notification):   kubectl logs -f -l app=notification-service -n sos-app"
+    echo -e "  View logs (communication):  kubectl logs -f -l app=communication-service -n sos-app"
+    echo -e "  View logs (device):         kubectl logs -f -l app=device-service -n sos-app"
     echo -e "  View logs (kafka):          kubectl logs -f -l app=kafka -n sos-app"
     echo -e "  View logs (mongodb):        kubectl logs -f -l app=mongodb -n sos-app"
+    echo -e "  View logs (mqtt):           kubectl logs -f -l app=mqtt-broker -n sos-app"
     echo -e "  Open Kubernetes dashboard:  minikube dashboard"
     echo -e "  Delete all resources:       kubectl delete namespace sos-app"
 

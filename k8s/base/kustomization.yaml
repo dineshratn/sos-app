@@ -14,12 +14,15 @@ resources:
   - redis-deployment.yaml
   - kafka-deployment.yaml
   - mongodb-deployment.yaml
+  - mqtt-broker-deployment.yaml
   - auth-service-deployment.yaml
   - user-service-deployment.yaml
   - medical-service-deployment.yaml
   - emergency-service-deployment.yaml
   - location-service-deployment.yaml
   - notification-service-deployment.yaml
+  - communication-service-deployment.yaml
+  - device-service-deployment.yaml
 
 # Common labels applied to all resources
 commonLabels:

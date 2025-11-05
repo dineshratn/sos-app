@@ -15,6 +15,8 @@ data:
   EMERGENCY_SERVICE_PORT: "8080"
   LOCATION_SERVICE_PORT: "8081"
   NOTIFICATION_SERVICE_PORT: "3005"
+  COMMUNICATION_SERVICE_PORT: "3004"
+  DEVICE_SERVICE_PORT: "8082"
 
   # Database Ports
   POSTGRES_PORT: "5432"
@@ -30,6 +32,8 @@ data:
   EMERGENCY_SERVICE_URL: "http://emergency-service:8080"
   LOCATION_SERVICE_URL: "http://location-service:8081"
   NOTIFICATION_SERVICE_URL: "http://notification-service:3005"
+  COMMUNICATION_SERVICE_URL: "http://communication-service:3004"
+  DEVICE_SERVICE_URL: "http://device-service:8082"
 
   # Database Names
   AUTH_DB_NAME: "sos_auth"
@@ -37,6 +41,8 @@ data:
   MEDICAL_DB_NAME: "sos_medical"
   EMERGENCY_DB_NAME: "sos_emergency"
   LOCATION_DB_NAME: "sos_location"
+  DEVICE_DB_NAME: "sos_devices"
+  COMMUNICATION_DB_NAME: "sos_communication"
 
   # Redis Database Indexes
   REDIS_DB: "0"
