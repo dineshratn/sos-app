@@ -72,16 +72,20 @@ build_images() {
     eval $(minikube docker-env)
 
     print_info "Building Auth Service..."
-    docker build -t sos-app/auth-service:latest ./services/auth-service
+    docker build -t sos-app/auth-service:latest ./sos-app/services/auth-service
     print_success "Auth Service built"
 
     print_info "Building User Service..."
-    docker build -t sos-app/user-service:latest ./services/user-service
+    docker build -t sos-app/user-service:latest ./sos-app/services/user-service
     print_success "User Service built"
 
     print_info "Building Medical Service..."
-    docker build -t sos-app/medical-service:latest ./services/medical-service
+    docker build -t sos-app/medical-service:latest ./sos-app/services/medical-service
     print_success "Medical Service built"
+
+    print_info "Building Emergency Service..."
+    docker build -t sos-app/emergency-service:latest ./sos-app/services/emergency-service
+    print_success "Emergency Service built"
 
     print_success "All images built successfully"
 }
@@ -107,11 +111,12 @@ deploy_k8s() {
     kubectl apply -f k8s/base/redis-pvc.yaml
     print_success "PVCs created"
 
-    # Deploy databases
-    print_info "Deploying databases..."
+    # Deploy databases and messaging
+    print_info "Deploying databases and message broker..."
     kubectl apply -f k8s/base/postgres-deployment.yaml
     kubectl apply -f k8s/base/redis-deployment.yaml
-    print_success "Databases deployed"
+    kubectl apply -f k8s/base/kafka-deployment.yaml
+    print_success "Databases and Kafka deployed"
 
     # Wait for databases to be ready
     print_info "Waiting for databases to be ready..."
@@ -119,11 +124,18 @@ deploy_k8s() {
     kubectl wait --for=condition=ready pod -l app=redis -n sos-app --timeout=120s
     print_success "Databases are ready"
 
+    # Wait for Kafka dependencies
+    print_info "Waiting for Zookeeper and Kafka..."
+    kubectl wait --for=condition=ready pod -l app=zookeeper -n sos-app --timeout=120s || true
+    kubectl wait --for=condition=ready pod -l app=kafka -n sos-app --timeout=120s || true
+    print_success "Kafka is ready"
+
     # Deploy services
     print_info "Deploying microservices..."
     kubectl apply -f k8s/base/auth-service-deployment.yaml
     kubectl apply -f k8s/base/user-service-deployment.yaml
     kubectl apply -f k8s/base/medical-service-deployment.yaml
+    kubectl apply -f k8s/base/emergency-service-deployment.yaml
     print_success "Microservices deployed"
 
     # Wait for services to be ready
@@ -131,6 +143,7 @@ deploy_k8s() {
     kubectl wait --for=condition=ready pod -l app=auth-service -n sos-app --timeout=180s || true
     kubectl wait --for=condition=ready pod -l app=user-service -n sos-app --timeout=180s || true
     kubectl wait --for=condition=ready pod -l app=medical-service -n sos-app --timeout=180s || true
+    kubectl wait --for=condition=ready pod -l app=emergency-service -n sos-app --timeout=180s || true
     print_success "Microservices are ready"
 }
 
@@ -143,14 +156,16 @@ display_info() {
     echo -e "${GREEN}Your services are now running!${NC}\n"
 
     echo -e "${BLUE}Service URLs:${NC}"
-    echo -e "  Auth Service:    http://${MINIKUBE_IP}:30001"
-    echo -e "  User Service:    http://${MINIKUBE_IP}:30002"
-    echo -e "  Medical Service: http://${MINIKUBE_IP}:30003"
+    echo -e "  Auth Service:      http://${MINIKUBE_IP}:30001"
+    echo -e "  User Service:      http://${MINIKUBE_IP}:30002"
+    echo -e "  Medical Service:   http://${MINIKUBE_IP}:30003"
+    echo -e "  Emergency Service: http://${MINIKUBE_IP}:30004"
 
     echo -e "\n${BLUE}Health Check URLs:${NC}"
-    echo -e "  Auth:    http://${MINIKUBE_IP}:30001/health"
-    echo -e "  User:    http://${MINIKUBE_IP}:30002/health"
-    echo -e "  Medical: http://${MINIKUBE_IP}:30003/health"
+    echo -e "  Auth:      http://${MINIKUBE_IP}:30001/health"
+    echo -e "  User:      http://${MINIKUBE_IP}:30002/health"
+    echo -e "  Medical:   http://${MINIKUBE_IP}:30003/health"
+    echo -e "  Emergency: http://${MINIKUBE_IP}:30004/health"
 
     echo -e "\n${BLUE}Useful Commands:${NC}"
     echo -e "  View all pods:              kubectl get pods -n sos-app"
@@ -158,6 +173,8 @@ display_info() {
     echo -e "  View logs (auth):           kubectl logs -f -l app=auth-service -n sos-app"
     echo -e "  View logs (user):           kubectl logs -f -l app=user-service -n sos-app"
     echo -e "  View logs (medical):        kubectl logs -f -l app=medical-service -n sos-app"
+    echo -e "  View logs (emergency):      kubectl logs -f -l app=emergency-service -n sos-app"
+    echo -e "  View logs (kafka):          kubectl logs -f -l app=kafka -n sos-app"
     echo -e "  Open Kubernetes dashboard:  minikube dashboard"
     echo -e "  Delete all resources:       kubectl delete namespace sos-app"
 

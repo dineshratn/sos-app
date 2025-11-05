@@ -596,7 +596,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Define emergency data structure
   - _Requirements: 2.0_
 
-- [ ] 75. Create database schema for emergencies table
+- [x] 75. Create database schema for emergencies table
   - File: services/emergency-service/internal/db/migrations/001_create_emergencies_table.sql
   - SQL: CREATE TABLE emergencies with fields from Emergency struct
   - Add indexes on userId and status for fast queries
@@ -617,7 +617,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Track emergency contact acknowledgments
   - _Requirements: 4.0.4_
 
-- [ ] 78. Create database schema for emergency_acknowledgments table
+- [x] 78. Create database schema for emergency_acknowledgments table
   - File: services/emergency-service/internal/db/migrations/002_create_acknowledgments_table.sql
   - SQL: CREATE TABLE emergency_acknowledgments with foreign key to emergencies
   - Add unique constraint on (emergencyId, contactId)
@@ -639,7 +639,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Process acknowledgment events from Notification Service
   - _Requirements: 4.0.3_
 
-- [ ] 81. Create trigger emergency endpoint
+- [x] 81. Create trigger emergency endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (POST /api/v1/emergency/trigger)
   - Validate input, create emergency record with PENDING status
   - Start countdown timer goroutine (5-10 seconds configurable)
@@ -655,35 +655,35 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Prevent accidental emergency triggers
   - _Requirements: 2.0.5_
 
-- [ ] 83. Create cancel emergency endpoint
+- [x] 83. Create cancel emergency endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (PUT /api/v1/emergency/:id/cancel)
   - Validate ownership, cancel countdown timer if PENDING
   - Update status to CANCELLED, publish EmergencyCancelled event
   - Purpose: Allow users to cancel emergency during countdown
   - _Requirements: 2.0.5_
 
-- [ ] 84. Create resolve emergency endpoint
+- [x] 84. Create resolve emergency endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (PUT /api/v1/emergency/:id/resolve)
   - Validate ownership, update status to RESOLVED
   - Prompt for resolution notes, publish EmergencyResolved event
   - Purpose: Mark emergency as resolved
   - _Requirements: 9.0.1, 9.0.4_
 
-- [ ] 85. Create get emergency endpoint
+- [x] 85. Create get emergency endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (GET /api/v1/emergency/:id)
   - Validate access (owner or emergency contact during active emergency)
   - Return emergency details with acknowledgments
   - Purpose: Retrieve emergency information
   - _Requirements: 2.0, 4.0_
 
-- [ ] 86. Create get emergency history endpoint
+- [x] 86. Create get emergency history endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (GET /api/v1/emergency/history)
   - Filter by userId, support pagination and date range filtering
   - Return list of past emergencies
   - Purpose: View emergency history
   - _Requirements: 9.0.2_
 
-- [ ] 87. Create acknowledge emergency endpoint
+- [x] 87. Create acknowledge emergency endpoint
   - File: services/emergency-service/internal/handlers/emergency_handler.go (POST /api/v1/emergency/:id/acknowledge)
   - Validate contact authorization, create acknowledgment record
   - Publish ContactAcknowledged event
@@ -698,7 +698,7 @@ This implementation plan breaks down the SOS App development into atomic, agent-
   - Purpose: Escalate to secondary contacts if needed
   - _Requirements: 4.0.3_
 
-- [ ] 89. Implement auto-trigger emergency endpoint (for IoT devices)
+- [x] 89. Implement auto-trigger emergency endpoint (for IoT devices)
   - File: services/emergency-service/internal/handlers/emergency_handler.go (POST /api/v1/emergency/auto-trigger)
   - Validate device authentication, create emergency with PENDING status
   - Set countdown to 30 seconds for fall detection scenarios

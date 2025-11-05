@@ -12,6 +12,7 @@ data:
   AUTH_SERVICE_PORT: "3001"
   USER_SERVICE_PORT: "3002"
   MEDICAL_SERVICE_PORT: "3003"
+  EMERGENCY_SERVICE_PORT: "8080"
 
   # Database Ports
   POSTGRES_PORT: "5432"
@@ -24,14 +25,19 @@ data:
   AUTH_SERVICE_URL: "http://auth-service:3001"
   USER_SERVICE_URL: "http://user-service:3002"
   MEDICAL_SERVICE_URL: "http://medical-service:3003"
+  EMERGENCY_SERVICE_URL: "http://emergency-service:8080"
 
   # Database Names
   AUTH_DB_NAME: "sos_auth"
   USER_DB_NAME: "sos_user"
   MEDICAL_DB_NAME: "sos_medical"
+  EMERGENCY_DB_NAME: "sos_emergency"
 
   # Redis Database Indexes
   REDIS_DB: "0"
+
+  # Kafka Configuration
+  KAFKA_BROKERS: "kafka:9092"
 
   # CORS Origins
   CORS_ORIGINS: "http://localhost:3000,http://localhost:8080"
