@@ -13,22 +13,60 @@
 
 ## 📥 Quick Start on Your Machine
 
-### Prerequisites
+### Choose Your Deployment Method
+
+#### ✅ **Option 1: Minikube (Recommended for WSL2)**
+
+Perfect for WSL2 environments without Docker Desktop!
+
+**Prerequisites:**
+- WSL2 installed
+- Minikube running
+- Docker (in WSL2)
+
+**Deploy in 1 command:**
+```bash
+# Clone and navigate
+git clone <your-repo-url>
+cd sos-app
+git checkout claude/review-spec-and-status-011CUevCbQXh7hLdqSuuGjt8
+
+# Deploy to Minikube
+./deploy-minikube.sh
+```
+
+**Access services:**
+```bash
+# Get Minikube IP
+minikube ip
+
+# Access services at:
+# http://<MINIKUBE_IP>:30001 (Auth)
+# http://<MINIKUBE_IP>:30002 (User)
+# http://<MINIKUBE_IP>:30003 (Medical)
+
+# Run tests
+./test-services-k8s.sh
+```
+
+📖 **See [MINIKUBE_GUIDE.md](../MINIKUBE_GUIDE.md) for complete WSL2 setup**
+
+---
+
+#### Option 2: Docker Compose (Docker Desktop Required)
+
+**Prerequisites:**
 - Docker Desktop installed (https://www.docker.com/products/docker-desktop)
 - Git
 
-### Step 1: Clone & Navigate
+**Deploy:**
 ```bash
+# Clone and navigate
 git clone <your-repo-url>
 cd sos-app
-
-# Switch to the working branch
 git checkout claude/review-spec-and-status-011CUevCbQXh7hLdqSuuGjt8
 cd sos-app
-```
 
-### Step 2: Start Services
-```bash
 # Start all services (builds automatically)
 docker-compose up --build
 ```
@@ -40,9 +78,9 @@ Wait ~30 seconds for services to start. You'll see:
 ✅ Medical Service listening on port 3003
 ```
 
-### Step 3: Test (New Terminal)
+**Test:**
 ```bash
-# Run automated tests
+# Run automated tests (new terminal)
 ./test-services.sh
 ```
 
@@ -52,14 +90,27 @@ Wait ~30 seconds for services to start. You'll see:
 
 ## 🌐 Access Services
 
+**Docker Compose:**
 - Auth Service: http://localhost:3001/health
 - User Service: http://localhost:3002/health
 - Medical Service: http://localhost:3003/health
+
+**Minikube:**
+```bash
+# Get Minikube IP first
+MINIKUBE_IP=$(minikube ip)
+
+# Then access:
+# http://${MINIKUBE_IP}:30001/health (Auth)
+# http://${MINIKUBE_IP}:30002/health (User)
+# http://${MINIKUBE_IP}:30003/health (Medical)
+```
 
 ---
 
 ## 📚 Documentation
 
+- **[MINIKUBE_GUIDE.md](../MINIKUBE_GUIDE.md)** - 🆕 Complete WSL2 + Minikube setup
 - **QUICKSTART.md** - 3-step quick start
 - **TESTING_GUIDE.md** - Complete API testing guide
 - **DOCKER_GUIDE.md** - Docker deployment guide
@@ -88,12 +139,22 @@ curl -X POST http://localhost:3001/api/v1/auth/register \
 
 ## 🛑 Stop Services
 
+**Docker Compose:**
 ```bash
 # Stop all
 docker-compose down
 
 # Stop and remove data (fresh start)
 docker-compose down -v
+```
+
+**Minikube:**
+```bash
+# Stop all pods
+kubectl delete namespace sos-app
+
+# Or stop Minikube completely
+minikube stop
 ```
 
 ---
