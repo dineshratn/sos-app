@@ -13,6 +13,8 @@ data:
   USER_SERVICE_PORT: "3002"
   MEDICAL_SERVICE_PORT: "3003"
   EMERGENCY_SERVICE_PORT: "8080"
+  LOCATION_SERVICE_PORT: "8081"
+  NOTIFICATION_SERVICE_PORT: "3005"
 
   # Database Ports
   POSTGRES_PORT: "5432"
@@ -26,12 +28,15 @@ data:
   USER_SERVICE_URL: "http://user-service:3002"
   MEDICAL_SERVICE_URL: "http://medical-service:3003"
   EMERGENCY_SERVICE_URL: "http://emergency-service:8080"
+  LOCATION_SERVICE_URL: "http://location-service:8081"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:3005"
 
   # Database Names
   AUTH_DB_NAME: "sos_auth"
   USER_DB_NAME: "sos_user"
   MEDICAL_DB_NAME: "sos_medical"
   EMERGENCY_DB_NAME: "sos_emergency"
+  LOCATION_DB_NAME: "sos_location"
 
   # Redis Database Indexes
   REDIS_DB: "0"
