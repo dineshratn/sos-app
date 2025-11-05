@@ -36,7 +36,7 @@ services:
   auth-service:
     build:
       context: ./services/auth-service
-      dockerfile: ../../docker/Dockerfile.node
+      dockerfile: Dockerfile
     container_name: sos-auth-service
     environment:
       NODE_ENV: development
@@ -62,7 +62,7 @@ services:
   user-service:
     build:
       context: ./services/user-service
-      dockerfile: ../../docker/Dockerfile.node
+      dockerfile: Dockerfile
     container_name: sos-user-service
     environment:
       NODE_ENV: development
@@ -86,7 +86,7 @@ services:
   medical-service:
     build:
       context: ./services/medical-service
-      dockerfile: ../../docker/Dockerfile.node
+      dockerfile: Dockerfile
     container_name: sos-medical-service
     environment:
       NODE_ENV: development
