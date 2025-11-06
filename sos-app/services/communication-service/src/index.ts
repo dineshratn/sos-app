@@ -26,7 +26,9 @@ import logger from './utils/logger';
 dotenv.config();
 
 const PORT = process.env.PORT || 3003;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const CORS_ORIGIN = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+  : ['http://localhost:3000'];
 
 // Initialize Express app
 const app = express();

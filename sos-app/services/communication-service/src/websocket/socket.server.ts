@@ -11,7 +11,7 @@ import logger from '../utils/logger';
 
 export async function setupSocketIOWithRedis(
   httpServer: HTTPServer,
-  corsOrigin: string
+  corsOrigin: string | string[]
 ): Promise<Server> {
   // Socket.IO configuration
   const socketOptions: Partial<ServerOptions> = {
