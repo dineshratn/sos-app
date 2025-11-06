@@ -1,0 +1,256 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: sos-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sos_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for session storage, caching)
+  redis:
+    image: redis:7-alpine
+    container_name: sos-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service
+  auth-service:
+    image: node:20-alpine
+    container_name: sos-auth-service
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sos_auth
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: dev-jwt-secret-change-in-production-please
+      JWT_EXPIRATION: 24h
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/auth-service:/app
+      - auth_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  # User Service
+  user-service:
+    image: node:20-alpine
+    container_name: sos-user-service
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sos_user
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: dev-jwt-secret-change-in-production-please
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/user-service:/app
+      - user_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  # Medical Service
+  medical-service:
+    image: node:20-alpine
+    container_name: sos-medical-service
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sos_medical
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: dev-jwt-secret-change-in-production-please
+      ENCRYPTION_SECRET_KEY: dev-encryption-key-32-chars-long!
+      ENCRYPTION_KEY_ID: dev-key-001
+      CORS_ORIGIN: http://localhost:3000
+      AUDIT_ENABLED: "true"
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./services/medical-service:/app
+      - medical_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  # MongoDB (for communication and notification services)
+  mongodb:
+    image: mongo:7-jammy
+    container_name: sos-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: mongo
+      MONGO_INITDB_DATABASE: admin
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Communication Service
+  communication-service:
+    image: node:20-alpine
+    container_name: sos-communication-service
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 3004
+      MONGODB_URI: mongodb://mongo:mongo@mongodb:27017/sos_communication?authSource=admin
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production-please
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: info
+    ports:
+      - "3004:3004"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/communication-service:/app
+      - communication_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  # Notification Service
+  notification-service:
+    image: node:20-alpine
+    container_name: sos-notification-service
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 3005
+      MONGODB_URI: mongodb://mongo:mongo@mongodb:27017/sos_notifications?authSource=admin
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_LEVEL: info
+      NOTIFICATION_RETRY_ATTEMPTS: 3
+    ports:
+      - "3005:3005"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/notification-service:/app
+      - notification_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+  # Emergency Service (Go)
+  emergency-service:
+    build:
+      context: ./services/emergency-service
+      dockerfile: Dockerfile
+    container_name: sos-emergency-service
+    environment:
+      PORT: 8080
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: sos_app_emergency
+      DB_SSLMODE: disable
+      DB_MAX_CONNS: 25
+      DB_MIN_CONNS: 5
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Location Service (Go)
+  location-service:
+    build:
+      context: ./services/location-service
+      dockerfile: Dockerfile
+    container_name: sos-location-service
+    environment:
+      PORT: 8081
+      TIMESCALEDB_URL: postgres://postgres:postgres@postgres:5432/sos_app_location?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: info
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Device Service (Go)
+  device-service:
+    build:
+      context: ./services/device-service
+      dockerfile: Dockerfile
+    container_name: sos-device-service
+    environment:
+      SERVER_ADDRESS: ":8082"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/device_db?sslmode=disable
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  auth_node_modules:
+  user_node_modules:
+  medical_node_modules:
+  communication_node_modules:
+  notification_node_modules:
+
+networks:
+  default:
+    name: sos-network
