@@ -9,7 +9,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Compile Go Binary
 # -----------------------------------------------------------------------------
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies and security updates
 RUN apk update && \
@@ -99,7 +99,7 @@ CMD ["--help"]
 # -----------------------------------------------------------------------------
 # Stage 3: Development Image (with debugging tools)
 # -----------------------------------------------------------------------------
-FROM golang:1.21-alpine AS development
+FROM golang:1.25-alpine AS development
 
 # Install development tools
 RUN apk update && \
