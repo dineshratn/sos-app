@@ -1,0 +1,281 @@
+# Production-grade Jaeger deployment with Elasticsearch backend
+# Use this for production instead of all-in-one
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-production-config
+  namespace: observability
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:6831
+          thrift_binary:
+            endpoint: 0.0.0.0:6832
+      zipkin:
+        endpoint: 0.0.0.0:9411
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 50
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 1024
+
+    exporters:
+      elasticsearch:
+        endpoints:
+          - http://elasticsearch:9200
+        index: jaeger-span
+        sending_queue:
+          enabled: true
+          num_consumers: 20
+          queue_size: 1000
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [memory_limiter, batch]
+          exporters: [elasticsearch]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-collector-prod
+  namespace: observability
+  labels:
+    app: jaeger
+    component: collector
+    environment: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: jaeger
+      component: collector
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        component: collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "14269"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: component
+                      operator: In
+                      values:
+                        - collector
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: jaeger-collector
+          image: jaegertracing/jaeger-collector:1.51
+          args:
+            - --config-file=/etc/jaeger/collector.yaml
+            - --es.server-urls=http://elasticsearch:9200
+            - --es.num-shards=5
+            - --es.num-replicas=1
+            - --es.index-prefix=jaeger
+            - --es.tags-as-fields.all=true
+          ports:
+            - containerPort: 14250
+              name: grpc
+            - containerPort: 14268
+              name: http
+            - containerPort: 14269
+              name: admin
+            - containerPort: 9411
+              name: zipkin
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch
+            - name: ES_SERVER_URLS
+              value: http://elasticsearch:9200
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/jaeger
+      volumes:
+        - name: config
+          configMap:
+            name: jaeger-production-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-query-prod
+  namespace: observability
+  labels:
+    app: jaeger
+    component: query
+    environment: production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jaeger
+      component: query
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        component: query
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "16687"
+    spec:
+      containers:
+        - name: jaeger-query
+          image: jaegertracing/jaeger-query:1.51
+          args:
+            - --es.server-urls=http://elasticsearch:9200
+            - --es.index-prefix=jaeger
+            - --query.max-clock-skew-adjustment=0s
+            - --query.bearer-token-propagation=true
+          ports:
+            - containerPort: 16686
+              name: query
+            - containerPort: 16687
+              name: grpc
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: elasticsearch
+            - name: ES_SERVER_URLS
+              value: http://elasticsearch:9200
+            - name: QUERY_BASE_PATH
+              value: /
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 16687
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 16687
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector-prod
+  namespace: observability
+  labels:
+    app: jaeger
+    component: collector
+spec:
+  type: ClusterIP
+  ports:
+    - port: 14250
+      name: grpc
+    - port: 14268
+      name: http
+    - port: 14269
+      name: admin
+    - port: 9411
+      name: zipkin
+    - port: 4317
+      name: otlp-grpc
+    - port: 4318
+      name: otlp-http
+  selector:
+    app: jaeger
+    component: collector
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-query-prod
+  namespace: observability
+  labels:
+    app: jaeger
+    component: query
+spec:
+  type: ClusterIP
+  ports:
+    - port: 16686
+      name: query
+    - port: 16687
+      name: grpc
+  selector:
+    app: jaeger
+    component: query
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jaeger-collector-hpa
+  namespace: observability
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jaeger-collector-prod
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

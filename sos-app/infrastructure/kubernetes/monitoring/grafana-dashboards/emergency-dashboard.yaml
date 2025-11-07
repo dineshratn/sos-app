@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-emergency
+  namespace: sos-app
+  labels:
+    app: grafana
+    dashboard: emergency
+data:
+  emergency-service.json: |
+    {
+      "dashboard": {
+        "title": "Emergency Alert Metrics",
+        "tags": ["sos-app", "emergency", "critical"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 1,
+        "refresh": "10s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Emergency Alerts (Real-time)",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(rate(emergency_alerts_total{namespace=\"sos-app\"}[1m])) * 60",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 50},
+                    {"color": "red", "value": 100}
+                  ]
+                },
+                "unit": "alerts/min"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Alert Delivery Time (p95)",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(emergency_alert_delivery_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 3},
+                    {"color": "red", "value": 5}
+                  ]
+                },
+                "unit": "s"
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Alert Success Rate",
+            "type": "gauge",
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "(sum(rate(emergency_alert_attempts_total{namespace=\"sos-app\"}[5m])) - sum(rate(emergency_alert_failures_total{namespace=\"sos-app\"}[5m]))) / sum(rate(emergency_alert_attempts_total{namespace=\"sos-app\"}[5m])) * 100",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                },
+                "unit": "percent"
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Active Emergencies",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(emergency_active_count{namespace=\"sos-app\"})",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Alert Delivery Time Over Time",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(emergency_alert_delivery_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(emergency_alert_delivery_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(emergency_alert_delivery_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "s", "label": "Delivery Time"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Alerts by Type",
+            "type": "piechart",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "targets": [
+              {
+                "expr": "sum(rate(emergency_alerts_total{namespace=\"sos-app\"}[5m])) by (alert_type)",
+                "legendFormat": "{{alert_type}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "title": "Emergency Timeline",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+            "targets": [
+              {
+                "expr": "sum(rate(emergency_alerts_total{namespace=\"sos-app\"}[1m])) by (alert_type)",
+                "legendFormat": "{{alert_type}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Escalation Metrics",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+            "targets": [
+              {
+                "expr": "sum(rate(emergency_escalations_total{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "Escalations",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(emergency_escalation_time_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p95 Escalation Time",
+                "refId": "B"
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "title": "Contact Notification Status",
+            "type": "table",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+            "targets": [
+              {
+                "expr": "sum(rate(emergency_contact_notifications_total{namespace=\"sos-app\"}[5m])) by (status, priority)",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ]
+          }
+        ]
+      }
+    }
