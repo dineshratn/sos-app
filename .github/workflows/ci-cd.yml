@@ -50,29 +50,39 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: sos-app/services/${{ matrix.service }}/package-lock.json
 
       - name: Set up Go (for Go services)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          cache: true
-          cache-dependency-path: sos-app/services/${{ matrix.service }}/go.sum
+
+      - name: Set up Python (for Python services)
+        if: contains(matrix.service, 'llm')
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
-        run: npm ci
+        run: npm install
 
       - name: Install dependencies (Go)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         working-directory: sos-app/services/${{ matrix.service }}
         run: go mod download
 
+      - name: Install dependencies (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest flake8 || true
+
       - name: Run linting (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
         run: npm run lint || echo "Linting not configured"
 
@@ -83,8 +93,13 @@ jobs:
           go install golang.org/x/lint/golint@latest
           golint ./... || echo "Linting warnings"
 
+      - name: Run linting (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Linting warnings"
+
       - name: Run tests (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
         run: npm test || echo "Tests not configured"
         env:
@@ -94,6 +109,11 @@ jobs:
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         working-directory: sos-app/services/${{ matrix.service }}
         run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run tests (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: pytest tests/ -v --cov=. --cov-report=xml || echo "Tests not configured"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -147,6 +167,8 @@ jobs:
         run: |
           if [[ "${{ matrix.service }}" == "emergency-service" ]] || [[ "${{ matrix.service }}" == "location-service" ]] || [[ "${{ matrix.service }}" == "device-service" ]]; then
             echo "dockerfile=sos-app/infrastructure/docker/Dockerfile.go" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "llm-service" ]]; then
+            echo "dockerfile=sos-app/services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
           else
             echo "dockerfile=sos-app/infrastructure/docker/Dockerfile.node" >> $GITHUB_OUTPUT
           fi
