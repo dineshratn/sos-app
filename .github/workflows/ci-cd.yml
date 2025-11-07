@@ -66,7 +66,7 @@ jobs:
       - name: Install dependencies (Node.js)
         if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Install dependencies (Go)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
