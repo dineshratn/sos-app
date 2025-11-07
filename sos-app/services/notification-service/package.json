@@ -38,7 +38,7 @@
     "cors": "^2.8.5",
     "compression": "^1.7.4",
     "express-rate-limit": "^8.2.1",
-    "uuid": "^9.0.1"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
