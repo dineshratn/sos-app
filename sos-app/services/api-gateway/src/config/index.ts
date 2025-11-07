@@ -21,6 +21,7 @@ interface Config {
     location: ServiceConfig;
     notification: ServiceConfig;
     communication: ServiceConfig;
+    llm: ServiceConfig;
   };
 
   // CORS
@@ -107,6 +108,11 @@ const config: Config = {
       timeout: parseInt(process.env.COMMUNICATION_SERVICE_TIMEOUT || '10000', 10),
       retries: parseInt(process.env.COMMUNICATION_SERVICE_RETRIES || '3', 10),
     },
+    llm: {
+      url: process.env.LLM_SERVICE_URL || 'http://llm-service:3007',
+      timeout: parseInt(process.env.LLM_SERVICE_TIMEOUT || '30000', 10), // LLM calls take longer
+      retries: parseInt(process.env.LLM_SERVICE_RETRIES || '2', 10),
+    },
   },
 
   // CORS Configuration
@@ -166,6 +172,7 @@ if (config.nodeEnv === 'production') {
     'LOCATION_SERVICE_URL',
     'NOTIFICATION_SERVICE_URL',
     'COMMUNICATION_SERVICE_URL',
+    'LLM_SERVICE_URL',
   ];
 
   const missingVars = requiredEnvVars.filter((envVar) => !process.env[envVar]);

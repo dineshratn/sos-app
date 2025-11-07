@@ -1,0 +1,266 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: sos-app
+  labels:
+    app: prometheus
+data:
+  # Alert rules for SOS App services
+  sos-app-alerts.yml: |
+    groups:
+      # General Service Availability
+      - name: service_availability
+        interval: 30s
+        rules:
+          - alert: ServiceDown
+            expr: up{job=~".*-service"} == 0
+            for: 2m
+            labels:
+              severity: critical
+              category: availability
+            annotations:
+              summary: "Service {{ $labels.service }} is down"
+              description: "{{ $labels.service }} on {{ $labels.pod }} has been down for more than 2 minutes."
+
+          - alert: HighServiceRestartRate
+            expr: rate(kube_pod_container_status_restarts_total{namespace="sos-app"}[15m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              category: stability
+            annotations:
+              summary: "High restart rate for {{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} is restarting frequently ({{ $value }} restarts/second)."
+
+      # API Performance
+      - name: api_performance
+        interval: 30s
+        rules:
+          - alert: HighAPILatency
+            expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+            for: 5m
+            labels:
+              severity: warning
+              category: performance
+            annotations:
+              summary: "High API latency on {{ $labels.service }}"
+              description: "95th percentile latency is {{ $value }}s for {{ $labels.service }}."
+
+          - alert: CriticalAPILatency
+            expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 3
+            for: 2m
+            labels:
+              severity: critical
+              category: performance
+            annotations:
+              summary: "Critical API latency on {{ $labels.service }}"
+              description: "95th percentile latency is {{ $value }}s for {{ $labels.service }}."
+
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+              category: errors
+            annotations:
+              summary: "High error rate on {{ $labels.service }}"
+              description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.service }}."
+
+          - alert: CriticalErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: critical
+              category: errors
+            annotations:
+              summary: "Critical error rate on {{ $labels.service }}"
+              description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.service }}."
+
+      # Emergency Service Specific
+      - name: emergency_service
+        interval: 30s
+        rules:
+          - alert: EmergencyAlertDeliveryDelayed
+            expr: histogram_quantile(0.95, rate(emergency_alert_delivery_duration_seconds_bucket[5m])) > 5
+            for: 2m
+            labels:
+              severity: critical
+              category: emergency
+            annotations:
+              summary: "Emergency alert delivery is delayed"
+              description: "95th percentile emergency alert delivery time is {{ $value }}s (threshold: 5s)."
+
+          - alert: EmergencyAlertFailureRateHigh
+            expr: rate(emergency_alert_failures_total[5m]) / rate(emergency_alert_attempts_total[5m]) > 0.01
+            for: 2m
+            labels:
+              severity: critical
+              category: emergency
+            annotations:
+              summary: "High emergency alert failure rate"
+              description: "Emergency alert failure rate is {{ $value | humanizePercentage }}."
+
+          - alert: EmergencyServiceOverloaded
+            expr: rate(emergency_alerts_total[1m]) > 100
+            for: 5m
+            labels:
+              severity: warning
+              category: capacity
+            annotations:
+              summary: "Emergency service is overloaded"
+              description: "Emergency service is processing {{ $value }} alerts per second."
+
+      # Location Service Specific
+      - name: location_service
+        interval: 30s
+        rules:
+          - alert: LocationUpdateDelayed
+            expr: histogram_quantile(0.95, rate(location_update_duration_seconds_bucket[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+              category: performance
+            annotations:
+              summary: "Location updates are delayed"
+              description: "95th percentile location update time is {{ $value }}s (threshold: 2s)."
+
+          - alert: LocationUpdateFrequencyLow
+            expr: rate(location_updates_total[5m]) < 0.1
+            for: 10m
+            labels:
+              severity: warning
+              category: data
+            annotations:
+              summary: "Low location update frequency"
+              description: "Location updates are arriving at {{ $value }} per second (expected: > 0.1/s)."
+
+      # Resource Utilization
+      - name: resource_utilization
+        interval: 30s
+        rules:
+          - alert: HighCPUUsage
+            expr: rate(container_cpu_usage_seconds_total{namespace="sos-app"}[5m]) > 0.8
+            for: 10m
+            labels:
+              severity: warning
+              category: resources
+            annotations:
+              summary: "High CPU usage for {{ $labels.pod }}"
+              description: "CPU usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}."
+
+          - alert: HighMemoryUsage
+            expr: container_memory_usage_bytes{namespace="sos-app"} / container_spec_memory_limit_bytes{namespace="sos-app"} > 0.9
+            for: 5m
+            labels:
+              severity: warning
+              category: resources
+            annotations:
+              summary: "High memory usage for {{ $labels.pod }}"
+              description: "Memory usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}."
+
+          - alert: PodMemoryOOM
+            expr: container_memory_working_set_bytes{namespace="sos-app"} / container_spec_memory_limit_bytes{namespace="sos-app"} > 0.95
+            for: 2m
+            labels:
+              severity: critical
+              category: resources
+            annotations:
+              summary: "Pod {{ $labels.pod }} is near OOM"
+              description: "Memory usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}."
+
+      # Database Performance
+      - name: database_performance
+        interval: 30s
+        rules:
+          - alert: HighDatabaseConnectionPoolUtilization
+            expr: database_connection_pool_active / database_connection_pool_max > 0.8
+            for: 5m
+            labels:
+              severity: warning
+              category: database
+            annotations:
+              summary: "High database connection pool utilization"
+              description: "Connection pool utilization is {{ $value | humanizePercentage }} for {{ $labels.service }}."
+
+          - alert: SlowDatabaseQueries
+            expr: histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m])) > 1
+            for: 5m
+            labels:
+              severity: warning
+              category: database
+            annotations:
+              summary: "Slow database queries for {{ $labels.service }}"
+              description: "95th percentile query time is {{ $value }}s."
+
+      # Notification Service
+      - name: notification_service
+        interval: 30s
+        rules:
+          - alert: HighNotificationFailureRate
+            expr: rate(notification_failures_total[5m]) / rate(notification_attempts_total[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              category: notifications
+            annotations:
+              summary: "High notification failure rate"
+              description: "Notification failure rate is {{ $value | humanizePercentage }}."
+
+          - alert: NotificationQueueBacklog
+            expr: notification_queue_size > 1000
+            for: 10m
+            labels:
+              severity: warning
+              category: notifications
+            annotations:
+              summary: "Notification queue has backlog"
+              description: "Notification queue size is {{ $value }} (threshold: 1000)."
+
+      # Authentication Service
+      - name: auth_service
+        interval: 30s
+        rules:
+          - alert: HighAuthenticationFailureRate
+            expr: rate(auth_failures_total[5m]) / rate(auth_attempts_total[5m]) > 0.2
+            for: 5m
+            labels:
+              severity: warning
+              category: security
+            annotations:
+              summary: "High authentication failure rate"
+              description: "Authentication failure rate is {{ $value | humanizePercentage }}."
+
+          - alert: SuspiciousAuthenticationActivity
+            expr: rate(auth_attempts_total[1m]) > 100
+            for: 2m
+            labels:
+              severity: critical
+              category: security
+            annotations:
+              summary: "Suspicious authentication activity detected"
+              description: "{{ $value }} authentication attempts per second detected."
+
+      # Medical Service (HIPAA-compliant)
+      - name: medical_service
+        interval: 30s
+        rules:
+          - alert: UnauthorizedMedicalDataAccess
+            expr: rate(medical_access_unauthorized_total[5m]) > 0
+            for: 1m
+            labels:
+              severity: critical
+              category: security-compliance
+            annotations:
+              summary: "Unauthorized medical data access detected"
+              description: "{{ $value }} unauthorized access attempts per second."
+
+          - alert: MedicalDataEncryptionFailure
+            expr: rate(medical_encryption_failures_total[5m]) > 0
+            for: 1m
+            labels:
+              severity: critical
+              category: security-compliance
+            annotations:
+              summary: "Medical data encryption failure"
+              description: "{{ $value }} encryption failures per second."

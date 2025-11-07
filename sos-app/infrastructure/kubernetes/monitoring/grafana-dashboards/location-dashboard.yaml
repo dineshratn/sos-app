@@ -1,0 +1,229 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-location
+  namespace: sos-app
+  labels:
+    app: grafana
+    dashboard: location
+data:
+  location-tracking.json: |
+    {
+      "dashboard": {
+        "title": "Location Tracking Dashboard",
+        "tags": ["sos-app", "location", "tracking"],
+        "timezone": "browser",
+        "schemaVersion": 38,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Location Updates per Second",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(rate(location_updates_total{namespace=\"sos-app\"}[1m]))",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 0.1},
+                    {"color": "green", "value": 1}
+                  ]
+                },
+                "unit": "updates/sec"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Update Latency (p95)",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(location_update_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 1},
+                    {"color": "red", "value": 2}
+                  ]
+                },
+                "unit": "s"
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Active Tracking Sessions",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(location_active_sessions{namespace=\"sos-app\"})",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "unit": "short"
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Geofence Violations",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+            "targets": [
+              {
+                "expr": "sum(rate(location_geofence_violations_total{namespace=\"sos-app\"}[5m])) * 60",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "thresholds"},
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 5},
+                    {"color": "red", "value": 10}
+                  ]
+                },
+                "unit": "violations/min"
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Location Update Frequency",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "targets": [
+              {
+                "expr": "sum(rate(location_updates_total{namespace=\"sos-app\"}[5m])) by (source)",
+                "legendFormat": "{{source}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "updates/sec", "label": "Update Rate"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Location Accuracy Distribution",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(location_accuracy_meters_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(location_accuracy_meters_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(location_accuracy_meters_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "lengthm", "label": "Accuracy"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 7,
+            "title": "GPS vs Network Location",
+            "type": "piechart",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+            "targets": [
+              {
+                "expr": "sum(rate(location_updates_total{namespace=\"sos-app\"}[5m])) by (source)",
+                "legendFormat": "{{source}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Location Database Queries",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+            "targets": [
+              {
+                "expr": "sum(rate(location_db_queries_total{namespace=\"sos-app\"}[5m])) by (query_type)",
+                "legendFormat": "{{query_type}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "title": "Distance Calculations",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+            "targets": [
+              {
+                "expr": "sum(rate(location_distance_calculations_total{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "Calculations/sec",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(location_distance_calculation_duration_seconds_bucket{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "p95 Duration",
+                "refId": "B"
+              }
+            ]
+          },
+          {
+            "id": 10,
+            "title": "Geofence Events",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+            "targets": [
+              {
+                "expr": "sum(rate(location_geofence_enter_total{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "Enter",
+                "refId": "A"
+              },
+              {
+                "expr": "sum(rate(location_geofence_exit_total{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "Exit",
+                "refId": "B"
+              },
+              {
+                "expr": "sum(rate(location_geofence_violations_total{namespace=\"sos-app\"}[5m]))",
+                "legendFormat": "Violations",
+                "refId": "C"
+              }
+            ]
+          }
+        ]
+      }
+    }
