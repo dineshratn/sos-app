@@ -16,6 +16,7 @@ import emergencyRoutes from './routes/emergency.routes';
 import locationRoutes from './routes/location.routes';
 import notificationRoutes from './routes/notification.routes';
 import communicationRoutes from './routes/communication.routes';
+import llmRoutes from './routes/llm.routes';
 
 const app: Application = express();
 
@@ -106,6 +107,7 @@ app.get('/health/ready', async (req: Request, res: Response) => {
       httpClient.get('location', '/health').catch(() => ({ status: 'down' })),
       httpClient.get('notification', '/health').catch(() => ({ status: 'down' })),
       httpClient.get('communication', '/health').catch(() => ({ status: 'down' })),
+      httpClient.get('llm', '/health').catch(() => ({ status: 'down' })),
     ]);
 
     const services = {
@@ -115,6 +117,7 @@ app.get('/health/ready', async (req: Request, res: Response) => {
       location: serviceChecks[3].status === 'fulfilled' ? 'up' : 'down',
       notification: serviceChecks[4].status === 'fulfilled' ? 'up' : 'down',
       communication: serviceChecks[5].status === 'fulfilled' ? 'up' : 'down',
+      llm: serviceChecks[6].status === 'fulfilled' ? 'up' : 'down',
     };
 
     const allServicesUp = Object.values(services).every((status) => status === 'up');
@@ -174,6 +177,11 @@ app.get('/', (req: Request, res: Response) => {
       locations: '/api/v1/locations',
       notifications: '/api/v1/notifications',
       communications: '/api/v1/communications',
+      llm: '/api/v1/llm',
+    },
+    websockets: {
+      location: '/ws/location',
+      communication: '/ws/communication',
     },
     documentation: '/api/v1/docs',
   });
@@ -187,6 +195,7 @@ app.use('/api/v1/emergencies', emergencyRoutes);
 app.use('/api/v1/locations', locationRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/communications', communicationRoutes);
+app.use('/api/v1/llm', llmRoutes);
 
 // ==================== Error Handling ====================
 
@@ -234,7 +243,18 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const startServer = async () => {
   try {
-    app.listen(config.port, '0.0.0.0', () => {
+    // Create HTTP server for WebSocket support
+    const http = await import('http');
+    const httpServer = http.createServer(app);
+
+    // Setup WebSocket proxies
+    const { setupLocationWebSocketProxy } = await import('./websocket/location.proxy');
+    const { setupCommunicationWebSocketProxy } = await import('./websocket/communication.proxy');
+
+    setupLocationWebSocketProxy(httpServer);
+    setupCommunicationWebSocketProxy(httpServer);
+
+    httpServer.listen(config.port, '0.0.0.0', () => {
       logger.info(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
@@ -253,6 +273,11 @@ const startServer = async () => {
 ║   - Location: ${config.services.location.url.padEnd(44)}║
 ║   - Notification: ${config.services.notification.url.padEnd(40)}║
 ║   - Communication: ${config.services.communication.url.padEnd(39)}║
+║   - LLM: ${config.services.llm.url.padEnd(49)}║
+║                                                           ║
+║   WebSockets:                                             ║
+║   - Location: ws://localhost:${config.port}/ws/location  ║
+║   - Communication: ws://localhost:${config.port}/ws/communication ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
       `);
