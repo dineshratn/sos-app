@@ -235,7 +235,7 @@ jobs:
             --name sos-app-staging-eks
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -297,7 +297,7 @@ jobs:
             --name ${{ env.EKS_CLUSTER_NAME }}
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
 
