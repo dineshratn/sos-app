@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: sos-app
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      initContainers:
+      - name: wait-for-mongodb
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z mongodb 27017; do echo waiting for mongodb; sleep 2; done;']
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done;']
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z kafka 9092; do echo waiting for kafka; sleep 2; done;']
+      containers:
+      - name: notification-service
+        image: sos-app/notification-service:latest
+        imagePullPolicy: Never  # Use local images built in Minikube
+        ports:
+        - containerPort: 3005
+          name: http
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-config
+              key: NODE_ENV
+        - name: PORT
+          value: "3005"
+        - name: MONGODB_URI
+          value: "mongodb://$(MONGO_USERNAME):$(MONGO_PASSWORD)@mongodb:27017/sos_notifications?authSource=admin"
+        - name: MONGO_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: MONGO_USERNAME
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: MONGO_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: REDIS_PASSWORD
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: sos-app-config
+              key: KAFKA_BROKERS
+        - name: KAFKA_EMERGENCY_CREATED_TOPIC
+          value: "emergency-created"
+        - name: KAFKA_ESCALATION_TOPIC
+          value: "emergency-escalation"
+        - name: KAFKA_CONSUMER_GROUP
+          value: "notification-service-group"
+        - name: FCM_SERVICE_ACCOUNT
+          value: "/config/fcm-service-account.json"
+        - name: APNS_KEY_PATH
+          value: "/config/apns-key.p8"
+        - name: APNS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: APNS_KEY_ID
+        - name: APNS_TEAM_ID
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: APNS_TEAM_ID
+        - name: TWILIO_ACCOUNT_SID
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: TWILIO_ACCOUNT_SID
+        - name: TWILIO_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: TWILIO_AUTH_TOKEN
+        - name: TWILIO_PHONE_NUMBER
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: TWILIO_PHONE_NUMBER
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: SENDGRID_API_KEY
+        - name: SENDGRID_FROM_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: sos-app-secrets
+              key: SENDGRID_FROM_EMAIL
+        - name: QUEUE_CONCURRENCY
+          value: "10"
+        - name: QUEUE_MAX_RETRY
+          value: "3"
+        - name: NOTIFICATION_RETENTION_DAYS
+          value: "730"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: sos-app
+  labels:
+    app: notification-service
+spec:
+  type: NodePort
+  ports:
+  - port: 3005
+    targetPort: 3005
+    nodePort: 30006
+    protocol: TCP
+    name: http
+  selector:
+    app: notification-service

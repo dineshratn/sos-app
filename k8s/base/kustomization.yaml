@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sos-app
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - emergency-migrations-configmap.yaml
+  - postgres-pvc.yaml
+  - redis-pvc.yaml
+  - postgres-deployment.yaml
+  - redis-deployment.yaml
+  - kafka-deployment.yaml
+  - mongodb-deployment.yaml
+  - mqtt-broker-deployment.yaml
+  - auth-service-deployment.yaml
+  - user-service-deployment.yaml
+  - medical-service-deployment.yaml
+  - emergency-service-deployment.yaml
+  - location-service-deployment.yaml
+  - notification-service-deployment.yaml
+  - communication-service-deployment.yaml
+  - device-service-deployment.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: sos-app
+  app.kubernetes.io/version: v1.0.0
+  app.kubernetes.io/managed-by: kustomize
+
+# Images can be customized here if needed
+# images:
+#   - name: sos-app/auth-service
+#     newTag: v1.0.0
+#   - name: sos-app/user-service
+#     newTag: v1.0.0
+#   - name: sos-app/medical-service
+#     newTag: v1.0.0

@@ -9,7 +9,7 @@ import logger from '../utils/logger';
 
 export class RedisService {
   private client: RedisClientType;
-  private isConnected: boolean = false;
+  public isConnected: boolean = false;
 
   constructor() {
     this.client = createClient({

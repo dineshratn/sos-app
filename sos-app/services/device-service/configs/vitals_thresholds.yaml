@@ -1,0 +1,48 @@
+# Default vital sign thresholds for monitoring
+default:
+  heart_rate:
+    min: 40      # Minimum heart rate in bpm
+    max: 120     # Maximum heart rate in bpm
+
+  spo2:
+    min: 90      # Minimum oxygen saturation percentage
+
+  temperature:
+    min: 35.0    # Minimum body temperature in Celsius
+    max: 38.5    # Maximum body temperature in Celsius
+
+  blood_pressure:
+    systolic:
+      min: 90    # Minimum systolic BP in mmHg
+      max: 180   # Maximum systolic BP in mmHg
+    diastolic:
+      min: 60    # Minimum diastolic BP in mmHg
+      max: 120   # Maximum diastolic BP in mmHg
+
+# Per-user customized thresholds
+# These override the default thresholds for specific users
+per_user:
+  # Example: User with specific health conditions
+  # "550e8400-e29b-41d4-a716-446655440000":
+  #   heart_rate:
+  #     min: 50
+  #     max: 100
+  #   spo2:
+  #     min: 92
+  #   temperature:
+  #     min: 36.0
+  #     max: 37.5
+  #   blood_pressure:
+  #     systolic:
+  #       min: 100
+  #       max: 160
+  #     diastolic:
+  #       min: 70
+  #       max: 100
+
+# Notes:
+# - Heart rate thresholds are for resting heart rate
+# - SpO2 below 90% is considered hypoxemia
+# - Temperature ranges are for adults
+# - Blood pressure thresholds are based on general health guidelines
+# - Customize per_user thresholds based on individual health profiles

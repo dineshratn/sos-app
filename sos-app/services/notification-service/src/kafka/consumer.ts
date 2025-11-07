@@ -60,11 +60,10 @@ export async function startKafkaConsumer(): Promise<void> {
 
     logger.info('Kafka consumer started successfully');
   } catch (error: any) {
-    logger.error('Failed to start Kafka consumer', {
+    logger.warn('Kafka connection failed, continuing without Kafka event consumption', {
       error: error.message,
-      stack: error.stack,
     });
-    throw error;
+    // Don't throw - allow service to continue without Kafka
   }
 }
 

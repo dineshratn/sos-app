@@ -33,13 +33,13 @@ export interface UserAttributes {
   lastName?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
-  passwordResetToken?: string;
-  passwordResetExpires?: Date;
   emailVerified: boolean;
   phoneVerified: boolean;
   lastLoginAt?: Date;
   failedLoginAttempts: number;
   accountLockedUntil?: Date;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
@@ -68,76 +68,76 @@ export interface UserCreationAttributes {
 })
 export default class User extends Model<UserAttributes, UserCreationAttributes> {
   @PrimaryKey
-  @Default(DataType.UUIDV4)
+  @Default(uuidv4)
   @Column(DataType.UUID)
-  id: string;
+  declare id: string;
 
   @Unique
   @AllowNull(false)
   @Index
   @Column(DataType.STRING(255))
-  email: string;
+  declare email: string;
 
   @Unique
   @Index
   @Column(DataType.STRING(20))
-  phoneNumber?: string;
+  declare phoneNumber?: string;
 
   @Column(DataType.STRING(255))
-  passwordHash?: string;
+  declare passwordHash?: string;
 
   @Default(AuthProvider.LOCAL)
   @Column(DataType.ENUM(...Object.values(AuthProvider)))
-  authProvider: AuthProvider;
+  declare authProvider: AuthProvider;
 
   @Column(DataType.STRING(255))
-  providerId?: string;
+  declare providerId?: string;
 
   @Column(DataType.STRING(100))
-  firstName?: string;
+  declare firstName?: string;
 
   @Column(DataType.STRING(100))
-  lastName?: string;
+  declare lastName?: string;
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  mfaEnabled: boolean;
+  declare mfaEnabled: boolean;
 
   @Column(DataType.STRING(255))
-  mfaSecret?: string;
-
-  @Column(DataType.STRING(255))
-  passwordResetToken?: string;
-
-  @Column(DataType.DATE)
-  passwordResetExpires?: Date;
+  declare mfaSecret?: string;
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  emailVerified: boolean;
+  declare emailVerified: boolean;
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  phoneVerified: boolean;
+  declare phoneVerified: boolean;
 
   @Column(DataType.DATE)
-  lastLoginAt?: Date;
+  declare lastLoginAt?: Date;
 
   @Default(0)
   @Column(DataType.INTEGER)
-  failedLoginAttempts: number;
+  declare failedLoginAttempts: number;
 
   @Column(DataType.DATE)
-  accountLockedUntil?: Date;
+  declare accountLockedUntil?: Date;
+
+  @Column(DataType.STRING(255))
+  declare passwordResetToken?: string;
+
+  @Column(DataType.DATE)
+  declare passwordResetExpires?: Date;
 
   @CreatedAt
-  createdAt: Date;
+  declare createdAt: Date;
 
   @UpdatedAt
-  updatedAt: Date;
+  declare updatedAt: Date;
 
   @DeletedAt
-  deletedAt?: Date;
+  declare deletedAt?: Date;
 
   // Associations
   @HasMany(() => Session)

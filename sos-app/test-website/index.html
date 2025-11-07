@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS App - Service Testing Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚨 SOS App - Service Testing Dashboard</h1>
+            <p class="subtitle">Test all microservices with sample data</p>
+            <div class="auth-status">
+                <span id="auth-indicator" class="status-badge offline">Not Authenticated</span>
+                <span id="current-user"></span>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="auth">🔐 Auth Service</button>
+            <button class="tab-button" data-tab="user">👤 User Service</button>
+            <button class="tab-button" data-tab="medical">🏥 Medical Service</button>
+            <button class="tab-button" data-tab="communication">💬 Communication</button>
+            <button class="tab-button" data-tab="notification">🔔 Notifications</button>
+            <button class="tab-button" data-tab="health">❤️ Health Checks</button>
+        </nav>
+
+        <!-- Auth Service Tab -->
+        <div id="auth" class="tab-content active">
+            <h2>Authentication Service Testing</h2>
+            <p class="service-info">Base URL: <code>http://localhost:3001</code></p>
+
+            <div class="test-section">
+                <h3>Register New User</h3>
+                <form id="register-form" class="test-form">
+                    <input type="email" id="reg-email" placeholder="Email" value="test@example.com" required>
+                    <input type="password" id="reg-password" placeholder="Password" value="Test123!@#" required>
+                    <input type="text" id="reg-firstname" placeholder="First Name" value="Test" required>
+                    <input type="text" id="reg-lastname" placeholder="Last Name" value="User" required>
+                    <input type="tel" id="reg-phone" placeholder="Phone" value="+1234567890">
+                    <input type="text" id="reg-deviceid" placeholder="Device ID" value="test-web-browser-001" required>
+                    <button type="submit" class="btn btn-primary">Register</button>
+                </form>
+                <div id="register-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Login</h3>
+                <form id="login-form" class="test-form">
+                    <input type="email" id="login-email" placeholder="Email" value="test@example.com" required>
+                    <input type="password" id="login-password" placeholder="Password" value="Test123!@#" required>
+                    <input type="text" id="login-deviceid" placeholder="Device ID" value="test-web-browser-001" required>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                <div id="login-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Get Current User</h3>
+                <button class="btn btn-secondary" onclick="getCurrentUser()">Get User Profile</button>
+                <div id="current-user-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Logout</h3>
+                <button class="btn btn-danger" onclick="logout()">Logout</button>
+                <div id="logout-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- User Service Tab -->
+        <div id="user" class="tab-content">
+            <h2>User Service Testing</h2>
+            <p class="service-info">Base URL: <code>http://localhost:3002</code></p>
+
+            <div class="test-section">
+                <h3>Create User Profile</h3>
+                <form id="create-profile-form" class="test-form">
+                    <input type="text" id="profile-firstname" placeholder="First Name" value="John" required>
+                    <input type="text" id="profile-lastname" placeholder="Last Name" value="Doe" required>
+                    <input type="date" id="profile-dob" value="1990-01-01">
+                    <select id="profile-gender">
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <input type="tel" id="profile-phone" placeholder="Phone" value="+1234567890">
+                    <textarea id="profile-address" placeholder="Address" rows="2">123 Main St, City, State 12345</textarea>
+                    <button type="submit" class="btn btn-primary">Create Profile</button>
+                </form>
+                <div id="create-profile-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Get User Profile</h3>
+                <button class="btn btn-secondary" onclick="getUserProfile()">Get My Profile</button>
+                <div id="get-profile-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Update User Profile</h3>
+                <form id="update-profile-form" class="test-form">
+                    <input type="text" id="update-firstname" placeholder="First Name" value="John Updated">
+                    <input type="text" id="update-lastname" placeholder="Last Name" value="Doe Updated">
+                    <input type="tel" id="update-phone" placeholder="Phone" value="+1987654321">
+                    <button type="submit" class="btn btn-primary">Update Profile</button>
+                </form>
+                <div id="update-profile-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Medical Service Tab -->
+        <div id="medical" class="tab-content">
+            <h2>Medical Service Testing</h2>
+            <p class="service-info">Base URL: <code>http://localhost:3003</code> | <span class="hipaa-badge">HIPAA Compliant</span></p>
+
+            <div class="test-section">
+                <h3>Create Medical Profile</h3>
+                <form id="create-medical-form" class="test-form">
+                    <select id="med-blood-type">
+                        <option value="">Select Blood Type</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                    </select>
+                    <input type="number" id="med-height" placeholder="Height (cm)" value="175">
+                    <input type="number" id="med-weight" placeholder="Weight (kg)" value="70">
+                    <textarea id="med-allergies" placeholder="Allergies (comma separated)" rows="2">Penicillin, Peanuts</textarea>
+                    <textarea id="med-conditions" placeholder="Medical Conditions (comma separated)" rows="2">Hypertension, Diabetes Type 2</textarea>
+                    <textarea id="med-medications" placeholder="Current Medications (comma separated)" rows="2">Metformin 500mg, Lisinopril 10mg</textarea>
+                    <button type="submit" class="btn btn-primary">Create Medical Profile</button>
+                </form>
+                <div id="create-medical-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Get Medical Profile</h3>
+                <button class="btn btn-secondary" onclick="getMedicalProfile()">Get My Medical Profile</button>
+                <div id="get-medical-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Add Medical Condition</h3>
+                <form id="add-condition-form" class="test-form">
+                    <input type="text" id="condition-name" placeholder="Condition Name" value="Asthma" required>
+                    <input type="date" id="condition-diagnosed" value="2020-05-15">
+                    <select id="condition-severity">
+                        <option value="mild">Mild</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="severe">Severe</option>
+                    </select>
+                    <textarea id="condition-notes" placeholder="Notes" rows="2">Seasonal asthma, triggered by pollen</textarea>
+                    <button type="submit" class="btn btn-primary">Add Condition</button>
+                </form>
+                <div id="add-condition-result" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Communication Service Tab -->
+        <div id="communication" class="tab-content">
+            <h2>Communication Service Testing</h2>
+            <p class="service-info">Base URL: <code>http://localhost:3004</code> | WebSocket: <code>ws://localhost:3004</code></p>
+
+            <div class="test-section">
+                <h3>WebSocket Connection</h3>
+                <div class="connection-status">
+                    <span id="ws-status" class="status-badge offline">Disconnected</span>
+                    <button class="btn btn-primary" onclick="connectWebSocket()">Connect WebSocket</button>
+                    <button class="btn btn-danger" onclick="disconnectWebSocket()">Disconnect</button>
+                </div>
+            </div>
+
+            <div class="test-section">
+                <h3>Send Message</h3>
+                <form id="send-message-form" class="test-form">
+                    <input type="text" id="msg-recipient" placeholder="Recipient User ID" value="user-123">
+                    <textarea id="msg-content" placeholder="Message content" rows="3">Hello! This is a test message from the SOS app.</textarea>
+                    <select id="msg-type">
+                        <option value="text">Text</option>
+                        <option value="alert">Alert</option>
+                        <option value="emergency">Emergency</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">Send Message</button>
+                </form>
+                <div id="send-message-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Message History</h3>
+                <button class="btn btn-secondary" onclick="getMessageHistory()">Load Messages</button>
+                <div id="message-history" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Real-time Messages</h3>
+                <div id="realtime-messages" class="message-box"></div>
+            </div>
+        </div>
+
+        <!-- Notification Service Tab -->
+        <div id="notification" class="tab-content">
+            <h2>Notification Service Testing</h2>
+            <p class="service-info">Base URL: <code>http://localhost:3005</code></p>
+
+            <div class="test-section">
+                <h3>Send Push Notification</h3>
+                <form id="send-notification-form" class="test-form">
+                    <input type="text" id="notif-title" placeholder="Title" value="Test Notification" required>
+                    <textarea id="notif-body" placeholder="Message body" rows="3" required>This is a test notification from the SOS app testing dashboard.</textarea>
+                    <select id="notif-priority">
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                    <select id="notif-type">
+                        <option value="fcm">Firebase (Android)</option>
+                        <option value="apns">APNs (iOS)</option>
+                        <option value="email">Email</option>
+                        <option value="sms">SMS</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">Send Notification</button>
+                </form>
+                <div id="send-notification-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Send Emergency Alert</h3>
+                <form id="emergency-alert-form" class="test-form">
+                    <input type="text" id="alert-location" placeholder="Location" value="123 Main St, City">
+                    <select id="alert-type">
+                        <option value="medical">Medical Emergency</option>
+                        <option value="fire">Fire</option>
+                        <option value="police">Police</option>
+                        <option value="accident">Accident</option>
+                    </select>
+                    <textarea id="alert-details" placeholder="Emergency details" rows="3">Urgent medical assistance needed. Patient experiencing chest pain.</textarea>
+                    <button type="submit" class="btn btn-danger">Send Emergency Alert</button>
+                </form>
+                <div id="emergency-alert-result" class="result"></div>
+            </div>
+
+            <div class="test-section">
+                <h3>Notification History</h3>
+                <button class="btn btn-secondary" onclick="getNotificationHistory()">Load History</button>
+                <div id="notification-history" class="result"></div>
+            </div>
+        </div>
+
+        <!-- Health Checks Tab -->
+        <div id="health" class="tab-content">
+            <h2>Service Health Checks</h2>
+            <p class="service-info">Check the status of all microservices</p>
+
+            <div class="test-section">
+                <h3>Service Status</h3>
+                <button class="btn btn-primary" onclick="checkAllHealth()">Check All Services</button>
+                <div id="health-results" class="health-grid">
+                    <div class="health-card" data-service="auth">
+                        <h4>🔐 Auth Service</h4>
+                        <p class="service-url">localhost:3001</p>
+                        <div class="health-status">
+                            <span class="status-badge">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="health-card" data-service="user">
+                        <h4>👤 User Service</h4>
+                        <p class="service-url">localhost:3002</p>
+                        <div class="health-status">
+                            <span class="status-badge">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="health-card" data-service="medical">
+                        <h4>🏥 Medical Service</h4>
+                        <p class="service-url">localhost:3003</p>
+                        <div class="health-status">
+                            <span class="status-badge">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="health-card" data-service="communication">
+                        <h4>💬 Communication</h4>
+                        <p class="service-url">localhost:3004</p>
+                        <div class="health-status">
+                            <span class="status-badge">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="health-card" data-service="notification">
+                        <h4>🔔 Notifications</h4>
+                        <p class="service-url">localhost:3005</p>
+                        <div class="health-status">
+                            <span class="status-badge">Checking...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-section">
+                <h3>Database Connections</h3>
+                <div id="db-status" class="result">
+                    <p>PostgreSQL: <span id="postgres-status">Unknown</span></p>
+                    <p>MongoDB: <span id="mongodb-status">Unknown</span></p>
+                    <p>Redis: <span id="redis-status">Unknown</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>SOS App Testing Dashboard | All services running on Docker Desktop</p>
+        <p class="note">⚠️ This is a testing interface. Do not use in production.</p>
+    </footer>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

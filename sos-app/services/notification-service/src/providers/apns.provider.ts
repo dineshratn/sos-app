@@ -1,4 +1,4 @@
-import apn from 'node-apn';
+import apn from '@parse/node-apn';
 import fs from 'fs';
 import { config } from '../config';
 import { logger } from '../utils/logger';
