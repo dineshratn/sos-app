@@ -15,6 +15,7 @@ import {
   DeviceInfo,
 } from '../types/auth.types';
 import { AppError } from '../middleware/errorHandler';
+import crypto from 'crypto';
 
 class AuthService {
   /**
@@ -426,6 +427,131 @@ class AuthService {
     } catch (error) {
       logger.error('Logout error:', error);
       throw new AppError('Logout failed', 500, 'LOGOUT_ERROR');
+    }
+  }
+
+  /**
+   * Request password reset - generates token and sends email
+   */
+  public async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const user = await User.findOne({ where: { email } });
+
+      // For security, always return success even if user doesn't exist
+      if (!user) {
+        logger.warn(`Password reset requested for non-existent email: ${email}`);
+        return {
+          success: true,
+          message: 'If an account exists with this email, a password reset link has been sent.',
+        };
+      }
+
+      // Generate secure random token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+      // Set token expiration (1 hour)
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      // Store hashed token in database
+      user.passwordResetToken = hashedToken;
+      user.passwordResetExpires = expiresAt;
+      await user.save();
+
+      // TODO: Send email with reset link containing resetToken (not hashed)
+      // For now, log the token (in production, this would be sent via email)
+      logger.info(`Password reset token generated for ${email}: ${resetToken}`);
+      logger.info(`Reset link: ${config.frontendUrl}/reset-password?token=${resetToken}`);
+
+      return {
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been sent.',
+      };
+    } catch (error) {
+      logger.error('Password reset request error:', error);
+      throw new AppError('Failed to process password reset request', 500, 'RESET_REQUEST_ERROR');
+    }
+  }
+
+  /**
+   * Reset password using token
+   */
+  public async resetPassword(
+    token: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // Validate password strength
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.isValid) {
+        throw new AppError(passwordValidation.message || 'Invalid password', 400, 'WEAK_PASSWORD');
+      }
+
+      // Hash the token to match what's stored in database
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+      // Find user with valid reset token
+      const user = await User.findOne({
+        where: {
+          passwordResetToken: hashedToken,
+        },
+      });
+
+      if (!user || !user.passwordResetExpires) {
+        throw new AppError('Invalid or expired password reset token', 400, 'INVALID_RESET_TOKEN');
+      }
+
+      // Check if token is expired
+      if (new Date() > user.passwordResetExpires) {
+        // Clear expired token
+        user.passwordResetToken = undefined;
+        user.passwordResetExpires = undefined;
+        await user.save();
+        throw new AppError('Password reset token has expired', 400, 'EXPIRED_RESET_TOKEN');
+      }
+
+      // Hash new password
+      const passwordHash = await hashPassword(newPassword);
+
+      // Update password and clear reset token
+      user.passwordHash = passwordHash;
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+
+      // Invalidate all existing sessions for security
+      const sessions = await Session.findAll({
+        where: { userId: user.id },
+      });
+
+      for (const session of sessions) {
+        // Blacklist refresh token
+        const expiry = getTokenExpiryTime(session.refreshToken);
+        if (expiry > 0) {
+          await redisService.blacklistToken(session.refreshToken, expiry);
+        }
+        // Delete from cache
+        await redisService.deleteSession(session.id);
+      }
+
+      // Delete all sessions from database
+      await Session.destroy({
+        where: { userId: user.id },
+      });
+
+      logger.info(`Password reset successful for user: ${user.id}`);
+
+      return {
+        success: true,
+        message: 'Password has been reset successfully. Please log in with your new password.',
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Password reset error:', error);
+      throw new AppError('Failed to reset password', 500, 'RESET_PASSWORD_ERROR');
     }
   }
 

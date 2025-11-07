@@ -33,6 +33,8 @@ export interface UserAttributes {
   lastName?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   emailVerified: boolean;
   phoneVerified: boolean;
   lastLoginAt?: Date;
@@ -68,15 +70,15 @@ export interface UserCreationAttributes {
 })
 export default class User extends Model<UserAttributes, UserCreationAttributes> {
   @PrimaryKey
-  @Default(uuidv4)
+  @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
-  id!: string;
+  id: string;
 
   @Unique
   @AllowNull(false)
   @Index
   @Column(DataType.STRING(255))
-  email!: string;
+  email: string;
 
   @Unique
   @Index
@@ -88,7 +90,7 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Default(AuthProvider.LOCAL)
   @Column(DataType.ENUM(...Object.values(AuthProvider)))
-  authProvider!: AuthProvider;
+  authProvider: AuthProvider;
 
   @Column(DataType.STRING(255))
   providerId?: string;
@@ -101,25 +103,31 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  mfaEnabled!: boolean;
+  mfaEnabled: boolean;
 
   @Column(DataType.STRING(255))
   mfaSecret?: string;
 
-  @Default(false)
-  @Column(DataType.BOOLEAN)
-  emailVerified!: boolean;
+  @Column(DataType.STRING(255))
+  passwordResetToken?: string;
+
+  @Column(DataType.DATE)
+  passwordResetExpires?: Date;
 
   @Default(false)
   @Column(DataType.BOOLEAN)
-  phoneVerified!: boolean;
+  emailVerified: boolean;
+
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  phoneVerified: boolean;
 
   @Column(DataType.DATE)
   lastLoginAt?: Date;
 
   @Default(0)
   @Column(DataType.INTEGER)
-  failedLoginAttempts!: number;
+  failedLoginAttempts: number;
 
   @Column(DataType.DATE)
   accountLockedUntil?: Date;
@@ -131,10 +139,10 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
   passwordResetExpires?: Date;
 
   @CreatedAt
-  createdAt!: Date;
+  createdAt: Date;
 
   @UpdatedAt
-  updatedAt!: Date;
+  updatedAt: Date;
 
   @DeletedAt
   deletedAt?: Date;

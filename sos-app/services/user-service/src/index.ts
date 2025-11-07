@@ -1,4 +1,4 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -6,6 +6,8 @@ import config from './config';
 import logger from './utils/logger';
 import { connectDatabase, syncDatabase, closeDatabase } from './db';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import profileRoutes from './routes/profile.routes';
+import emergencyContactRoutes from './routes/emergencyContact.routes';
 
 const app: Application = express();
 
@@ -13,14 +15,12 @@ const app: Application = express();
 app.use(helmet());
 
 // CORS configuration
-app.use(
-  cors({
-    origin: config.cors.origins,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+app.use(cors({
+  origin: config.cors.origins,
+  credentials: config.cors.credentials,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -42,7 +42,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging middleware
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
     userAgent: req.get('user-agent'),
@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoints
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: config.serviceName,
@@ -61,7 +61,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/health/startup', (req, res) => {
+app.get('/health/startup', (req: Request, res: Response) => {
   res.json({
     status: 'started',
     service: config.serviceName,
@@ -69,8 +69,10 @@ app.get('/health/startup', (req, res) => {
   });
 });
 
-app.get('/health/ready', async (req, res) => {
+app.get('/health/ready', async (req: Request, res: Response) => {
   try {
+    // Check database connection
+    await connectDatabase();
     res.json({
       status: 'ready',
       service: config.serviceName,
@@ -86,7 +88,7 @@ app.get('/health/ready', async (req, res) => {
   }
 });
 
-app.get('/health/live', (req, res) => {
+app.get('/health/live', (req: Request, res: Response) => {
   res.json({
     status: 'alive',
     service: config.serviceName,
@@ -95,11 +97,11 @@ app.get('/health/live', (req, res) => {
 });
 
 // Root endpoint
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   res.json({
     service: config.serviceName,
     version: '1.0.0',
-    description: 'SOS App User Service - Profile & Emergency Contact Management',
+    description: 'SOS App User Service - User profiles and emergency contacts',
     endpoints: {
       health: '/health',
       startup: '/health/startup',
@@ -112,11 +114,8 @@ app.get('/', (req, res) => {
 });
 
 // API Routes
-import userRoutes from './routes/user.routes';
-import contactRoutes from './routes/contacts.routes';
-
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/contacts', contactRoutes);
+app.use('/api/v1/users/profile', profileRoutes);
+app.use('/api/v1/users/emergency-contacts', emergencyContactRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import authService from '../services/auth.service';
-import passwordResetService from '../services/password-reset.service';
+import mfaService from '../services/mfa.service';
 import { validateToken } from '../middleware/validateToken';
 import {
   registerValidation,
@@ -19,6 +19,7 @@ import {
 } from '../types/auth.types';
 import config from '../config';
 import logger from '../utils/logger';
+import { generateTokenPair } from '../utils/jwt';
 
 const router = Router();
 
@@ -239,9 +240,9 @@ router.post(
         return;
       }
 
-      const result = await passwordResetService.requestPasswordReset(email);
+      const result = await authService.requestPasswordReset(email);
 
-      logger.info(`Password reset requested for email: ${email}`);
+      logger.info(`Password reset requested for: ${email}`);
 
       res.status(200).json(result);
     } catch (error) {
@@ -252,7 +253,7 @@ router.post(
 
 /**
  * @route   POST /api/v1/auth/password-reset
- * @desc    Confirm password reset with token and new password
+ * @desc    Reset password using token
  * @access  Public
  */
 router.post(
@@ -270,18 +271,9 @@ router.post(
         return;
       }
 
-      if (newPassword.length < 8) {
-        res.status(400).json({
-          success: false,
-          error: 'Password must be at least 8 characters long',
-          code: 'WEAK_PASSWORD',
-        });
-        return;
-      }
+      const result = await authService.resetPassword(token, newPassword);
 
-      const result = await passwordResetService.confirmPasswordReset(token, newPassword);
-
-      logger.info(`Password reset completed for token: ${token.substring(0, 10)}...`);
+      logger.info('Password reset completed successfully');
 
       res.status(200).json(result);
     } catch (error) {
@@ -291,19 +283,104 @@ router.post(
 );
 
 /**
- * @route   GET /api/v1/auth/validate-reset-token/:token
- * @desc    Validate password reset token
- * @access  Public
+ * @route   POST /api/v1/auth/mfa/challenge
+ * @desc    Verify MFA code during login - issues tokens after successful verification
+ * @access  Private (requires valid access token from partial login)
  */
-router.get(
-  '/validate-reset-token/:token',
+router.post(
+  '/mfa/challenge',
+  validateToken,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { token } = req.params;
+      const userId = req.userId!;
+      const { token, deviceId, deviceName, deviceType } = req.body;
 
-      const result = await passwordResetService.validateResetToken(token);
+      if (!token) {
+        res.status(400).json({
+          success: false,
+          error: 'MFA token is required',
+          code: 'TOKEN_REQUIRED',
+        });
+        return;
+      }
 
-      res.status(200).json(result);
+      // Verify MFA code
+      const isValid = await mfaService.verifyMFALogin(userId, token);
+
+      if (!isValid) {
+        res.status(401).json({
+          success: false,
+          error: 'Invalid MFA code',
+          code: 'INVALID_MFA_CODE',
+        });
+        return;
+      }
+
+      // Import User and Session models
+      const User = (await import('../models/User')).default;
+      const Session = (await import('../models/Session')).default;
+
+      const user = await User.findByPk(userId);
+
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found',
+          code: 'USER_NOT_FOUND',
+        });
+        return;
+      }
+
+      // Create new session or update existing
+      let session = await Session.findOne({
+        where: {
+          userId,
+          deviceId,
+        },
+      });
+
+      const tokens = generateTokenPair(user.id, user.email, session?.id || '');
+
+      if (session && session.isValid()) {
+        // Update existing session
+        session.refreshToken = tokens.refreshToken;
+        session.updateLastActive();
+        await session.save();
+      } else {
+        // Create new session
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + config.session.timeoutHours);
+
+        session = await Session.create({
+          userId,
+          deviceId: deviceId || 'unknown',
+          deviceName,
+          deviceType,
+          refreshToken: tokens.refreshToken,
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.get('user-agent'),
+          expiresAt,
+        });
+      }
+
+      // Update last login
+      user.updateLastLogin();
+      await user.save();
+
+      logger.info(`MFA challenge successful for user: ${userId}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'MFA verification successful',
+        user: user.toSafeObject(),
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
+          tokenType: 'Bearer',
+        },
+        session: session.toSafeObject(),
+      });
     } catch (error) {
       next(error);
     }

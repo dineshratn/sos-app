@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: location-service
+  namespace: sos-app
+  labels:
+    app: location-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3004
+      targetPort: 3004
+      protocol: TCP
+      name: http
+  selector:
+    app: location-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: location-service
+  namespace: sos-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: location-service
+  template:
+    metadata:
+      labels:
+        app: location-service
+    spec:
+      containers:
+        - name: location-service
+          image: sos-app/location-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3004
+              name: http
+          env:
+            - name: PORT
+              value: "3004"
+            - name: MONGODB_URI
+              value: "mongodb://$(MONGODB_ROOT_USERNAME):$(MONGODB_ROOT_PASSWORD)@mongodb:27017/sos_location_db?authSource=admin"
+            - name: MONGODB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: mongodb-root-username
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: mongodb-root-password
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: database-hosts
+                  key: KAFKA_BROKERS
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: jwt-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

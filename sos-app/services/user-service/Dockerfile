@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for User Service
+# Multi-stage build for User Service
 
 # Stage 1: Build
 FROM node:20-alpine AS builder
@@ -10,39 +10,32 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --only=production && \
+    npm cache clean --force
 
 # Copy source code
 COPY src ./src
 
 # Build TypeScript
-RUN npm run build
+RUN npm install -g typescript && \
+    npm run build
 
 # Stage 2: Production
 FROM node:20-alpine
 
-# Set working directory
 WORKDIR /app
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Copy package files
-COPY package*.json ./
+# Copy built application
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Copy built application from builder
-COPY --from=builder /app/dist ./dist
-
-# Copy database migrations
-COPY src/migrations ./dist/migrations
-
-# Change ownership to nodejs user
-RUN chown -R nodejs:nodejs /app
+# Create logs directory
+RUN mkdir -p logs && chown nodejs:nodejs logs
 
 # Switch to non-root user
 USER nodejs
@@ -51,7 +44,7 @@ USER nodejs
 EXPOSE 3002
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application

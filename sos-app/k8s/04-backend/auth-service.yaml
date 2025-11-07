@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: sos-app
+  labels:
+    app: auth-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+      name: http
+  selector:
+    app: auth-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: sos-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: auth-service
+          image: sos-app/auth-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3001
+              name: http
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: service-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "3001"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: database-hosts
+                  key: POSTGRES_AUTH_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: database-hosts
+                  key: POSTGRES_AUTH_PORT
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-auth-credentials
+                  key: postgres-db
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-auth-credentials
+                  key: postgres-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-auth-credentials
+                  key: postgres-password
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: database-hosts
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: database-hosts
+                  key: REDIS_PORT
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: jwt-secret
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: jwt-refresh-secret
+            - name: CORS_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: service-config
+                  key: CORS_ORIGINS
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

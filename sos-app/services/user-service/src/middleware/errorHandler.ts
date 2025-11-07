@@ -6,49 +6,77 @@ export class AppError extends Error {
   public code: string;
   public isOperational: boolean;
 
-  constructor(message: string, statusCode: number, code: string) {
+  constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_SERVER_ERROR') {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = true;
+
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
+/**
+ * Global error handler middleware
+ */
 export const errorHandler = (
   err: Error | AppError,
   req: Request,
   res: Response,
   next: NextFunction
-): void => {
+) => {
+  let statusCode = 500;
+  let code = 'INTERNAL_SERVER_ERROR';
+  let message = 'An unexpected error occurred';
+
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({
-      success: false,
-      error: err.message,
-      code: err.code,
-    });
-    return;
+    statusCode = err.statusCode;
+    code = err.code;
+    message = err.message;
   }
 
-  // Unexpected errors
-  logger.error('Unexpected error:', {
-    error: err.message,
+  // Log error
+  logger.error('Error occurred:', {
+    message: err.message,
+    code,
+    statusCode,
     stack: err.stack,
-    path: req.path,
+    url: req.url,
     method: req.method,
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    userId: (req as any).user?.userId,
   });
 
-  res.status(500).json({
+  // Send error response
+  res.status(statusCode).json({
     success: false,
-    error: 'Internal server error',
-    code: 'INTERNAL_ERROR',
+    error: message,
+    code,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };
 
-export const notFoundHandler = (req: Request, res: Response): void => {
-  res.status(404).json({
-    success: false,
-    error: `Route ${req.method} ${req.path} not found`,
-    code: 'ROUTE_NOT_FOUND',
-  });
+/**
+ * 404 Not Found handler
+ */
+export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+  const error = new AppError(
+    `Route ${req.method} ${req.path} not found`,
+    404,
+    'ROUTE_NOT_FOUND'
+  );
+  next(error);
+};
+
+/**
+ * Async error wrapper
+ * Catches errors in async route handlers
+ */
+export const asyncHandler = (
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
+) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
 };

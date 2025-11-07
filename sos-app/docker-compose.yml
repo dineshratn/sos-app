@@ -1,38 +1,119 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
-  postgres:
+  # ==================== Databases ====================
+
+  # PostgreSQL for Auth Service
+  postgres-auth:
     image: postgres:15-alpine
-    container_name: sos-postgres
+    container_name: sos-postgres-auth
     environment:
+      POSTGRES_DB: sos_auth_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sos_db
+      POSTGRES_PASSWORD: postgres123
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - postgres-auth-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - sos-network
 
-  # Redis (for session storage, caching)
-  redis:
-    image: redis:7-alpine
-    container_name: sos-redis
+  # PostgreSQL for User Service
+  postgres-user:
+    image: postgres:15-alpine
+    container_name: sos-postgres-user
+    environment:
+      POSTGRES_DB: sos_user_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
     ports:
-      - "6379:6379"
+      - "5433:5432"
+    volumes:
+      - postgres-user-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - sos-network
 
-  # Auth Service
+  # MongoDB for Emergency, Location, Notification Services
+  mongodb:
+    image: mongo:7-jammy
+    container_name: sos-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: mongo123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sos-network
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: sos-redis
+    command: redis-server --requirepass redis123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sos-network
+
+  # Kafka for event streaming
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: sos-kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sos-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: sos-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - sos-network
+
+  # ==================== Backend Services ====================
+
+  # Auth Service (Node.js/TypeScript)
   auth-service:
     build:
       context: ./services/auth-service
@@ -41,24 +122,34 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sos_auth
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-jwt-secret-change-in-production-please
-      JWT_EXPIRATION: 24h
-      CORS_ORIGIN: http://localhost:3000
+      DB_HOST: postgres-auth
+      DB_PORT: 5432
+      DB_NAME: sos_auth_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-key}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
     ports:
       - "3001:3001"
     depends_on:
-      postgres:
+      postgres-auth:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./services/auth-service:/app
-      - /app/node_modules
-    command: npm run dev
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
 
-  # User Service
+  # User Service (Node.js/TypeScript)
   user-service:
     build:
       context: ./services/user-service
@@ -67,52 +158,193 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3002
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sos_user
-      JWT_SECRET: dev-jwt-secret-change-in-production-please
-      CORS_ORIGIN: http://localhost:3000
+      DB_HOST: postgres-user
+      DB_PORT: 5432
+      DB_NAME: sos_user_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres123
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      CORS_ORIGINS: http://localhost:3000,http://localhost:8080
     ports:
       - "3002:3002"
     depends_on:
-      postgres:
+      postgres-user:
         condition: service_healthy
       auth-service:
-        condition: service_started
-    volumes:
-      - ./services/user-service:/app
-      - /app/node_modules
-    command: npm run dev
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
 
-  # Medical Service
-  medical-service:
+  # Emergency Service (Go)
+  emergency-service:
     build:
-      context: ./services/medical-service
+      context: ./services/emergency-service
       dockerfile: Dockerfile
-    container_name: sos-medical-service
+    container_name: sos-emergency-service
     environment:
-      NODE_ENV: development
       PORT: 3003
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sos_medical
-      JWT_SECRET: dev-jwt-secret-change-in-production-please
-      ENCRYPTION_SECRET_KEY: dev-encryption-key-32-chars-long!
-      ENCRYPTION_KEY_ID: dev-key-001
-      CORS_ORIGIN: http://localhost:3000
-      AUDIT_ENABLED: "true"
+      MONGODB_URI: mongodb://admin:mongo123@mongodb:27017/sos_emergency_db?authSource=admin
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
     ports:
       - "3003:3003"
     depends_on:
-      postgres:
+      mongodb:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
+
+  # Location Service (Go)
+  location-service:
+    build:
+      context: ./services/location-service
+      dockerfile: Dockerfile
+    container_name: sos-location-service
+    environment:
+      PORT: 3004
+      MONGODB_URI: mongodb://admin:mongo123@mongodb:27017/sos_location_db?authSource=admin
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+    ports:
+      - "3004:3004"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
+
+  # Notification Service (Node.js)
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: sos-notification-service
+    environment:
+      PORT: 3005
+      MONGODB_URI: mongodb://admin:mongo123@mongodb:27017/sos_notification_db?authSource=admin
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123
+    ports:
+      - "3005:3005"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
+
+  # Communication Service (Node.js)
+  communication-service:
+    build:
+      context: ./services/communication-service
+      dockerfile: Dockerfile
+    container_name: sos-communication-service
+    environment:
+      PORT: 3006
+      MONGODB_URI: mongodb://admin:mongo123@mongodb:27017/sos_communication_db?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+    ports:
+      - "3006:3006"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sos-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: sos-api-gateway
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+      EMERGENCY_SERVICE_URL: http://emergency-service:3003
+      LOCATION_SERVICE_URL: http://location-service:3004
+      NOTIFICATION_SERVICE_URL: http://notification-service:3005
+      COMMUNICATION_SERVICE_URL: http://communication-service:3006
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis123
+      CORS_ORIGINS: http://localhost:8080
+      CIRCUIT_BREAKER_ENABLED: true
+    ports:
+      - "3000:3000"
+    depends_on:
       auth-service:
-        condition: service_started
-    volumes:
-      - ./services/medical-service:/app
-      - /app/node_modules
-    command: npm run dev
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      emergency-service:
+        condition: service_healthy
+      location-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - sos-network
 
 volumes:
-  postgres_data:
-    driver: local
+  postgres-auth-data:
+  postgres-user-data:
+  mongodb-data:
+  redis-data:
 
 networks:
-  default:
-    name: sos-network
+  sos-network:
+    driver: bridge

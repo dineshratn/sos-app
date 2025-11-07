@@ -54,20 +54,20 @@ export interface SessionCreationAttributes {
 })
 export default class Session extends Model<SessionAttributes, SessionCreationAttributes> {
   @PrimaryKey
-  @Default(uuidv4)
+  @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
-  id!: string;
+  id: string;
 
   @ForeignKey(() => User)
   @AllowNull(false)
   @Index
   @Column(DataType.UUID)
-  userId!: string;
+  userId: string;
 
   @AllowNull(false)
   @Index
   @Column(DataType.STRING(255))
-  deviceId!: string;
+  deviceId: string;
 
   @Column(DataType.STRING(255))
   deviceName?: string;
@@ -78,7 +78,7 @@ export default class Session extends Model<SessionAttributes, SessionCreationAtt
   @AllowNull(false)
   @Index({ unique: true })
   @Column(DataType.TEXT)
-  refreshToken!: string;
+  refreshToken: string;
 
   @Column(DataType.STRING(45))
   ipAddress?: string;
@@ -89,17 +89,17 @@ export default class Session extends Model<SessionAttributes, SessionCreationAtt
   @AllowNull(false)
   @Index
   @Column(DataType.DATE)
-  expiresAt!: Date;
+  expiresAt: Date;
 
   @Default(DataType.NOW)
   @Column(DataType.DATE)
-  lastActiveAt!: Date;
+  lastActiveAt: Date;
 
   @CreatedAt
-  createdAt!: Date;
+  createdAt: Date;
 
   @UpdatedAt
-  updatedAt!: Date;
+  updatedAt: Date;
 
   // Associations
   @BelongsTo(() => User)

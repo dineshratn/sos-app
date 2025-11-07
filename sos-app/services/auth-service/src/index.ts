@@ -2,13 +2,17 @@ import express, { Application } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import passport from 'passport';
 import config from './config';
 import logger from './utils/logger';
 import { connectDatabase, syncDatabase, closeDatabase } from './db';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
+import oauthRoutes from './routes/oauth.routes';
 import mfaRoutes from './routes/mfa.routes';
 import redisService from './services/redis.service';
+import { configureGoogleStrategy } from './strategies/google.strategy';
+// import { configureAppleStrategy } from './strategies/apple.strategy'; // Temporarily disabled
 
 const app: Application = express();
 
@@ -41,6 +45,13 @@ app.use('/api/', limiter);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Initialize Passport for OAuth
+app.use(passport.initialize());
+
+// Configure OAuth strategies
+configureGoogleStrategy();
+// configureAppleStrategy(); // Temporarily disabled
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -115,6 +126,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', oauthRoutes);
 app.use('/api/v1/auth/mfa', mfaRoutes);
 
 // 404 handler

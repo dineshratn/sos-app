@@ -1,23 +1,27 @@
 import speakeasy from 'speakeasy';
-import qrcode from 'qrcode';
+import QRCode from 'qrcode';
 import User from '../models/User';
-import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
-import config from '../config';
+import { AppError } from '../middleware/errorHandler';
 
-/**
- * MFA Service
- *
- * Handles Time-based One-Time Password (TOTP) multi-factor authentication
- * Uses speakeasy for TOTP generation and verification
- */
+interface MFAEnrollmentResponse {
+  success: boolean;
+  message: string;
+  secret: string;
+  qrCode: string;
+  manualEntryKey: string;
+}
+
+interface MFAVerificationResponse {
+  success: boolean;
+  message: string;
+}
+
 class MFAService {
   /**
-   * Enroll user in MFA - Generate TOTP secret and QR code
+   * Enroll user in MFA - generate TOTP secret and QR code
    */
-  public async enrollMFA(
-    userId: string
-  ): Promise<{ success: boolean; secret: string; qrCodeUrl: string; backupCodes: string[] }> {
+  public async enrollMFA(userId: string): Promise<MFAEnrollmentResponse> {
     try {
       const user = await User.findByPk(userId);
 
@@ -36,24 +40,21 @@ class MFAService {
         length: 32,
       });
 
-      // Generate QR code as data URL
-      const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url || '');
-
-      // Generate backup codes (8 codes, 10 characters each)
-      const backupCodes = this.generateBackupCodes(8);
-
-      // Save secret to user (temporarily until verified)
-      // Note: In production, encrypt this secret before storing
+      // Store the secret temporarily (not enabled yet until verified)
       user.mfaSecret = secret.base32;
       await user.save();
+
+      // Generate QR code
+      const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url!);
 
       logger.info(`MFA enrollment initiated for user: ${userId}`);
 
       return {
         success: true,
+        message: 'Scan the QR code with your authenticator app',
         secret: secret.base32,
-        qrCodeUrl,
-        backupCodes,
+        qrCode: qrCodeDataUrl,
+        manualEntryKey: secret.base32,
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -65,12 +66,9 @@ class MFAService {
   }
 
   /**
-   * Verify TOTP code and enable MFA
+   * Verify MFA code and enable MFA for the user
    */
-  public async verifyAndEnableMFA(
-    userId: string,
-    token: string
-  ): Promise<{ success: boolean; message: string }> {
+  public async verifyAndEnableMFA(userId: string, token: string): Promise<MFAVerificationResponse> {
     try {
       const user = await User.findByPk(userId);
 
@@ -78,28 +76,24 @@ class MFAService {
         throw new AppError('User not found', 404, 'USER_NOT_FOUND');
       }
 
+      if (!user.mfaSecret) {
+        throw new AppError('MFA enrollment not initiated', 400, 'MFA_NOT_INITIATED');
+      }
+
       if (user.mfaEnabled) {
         throw new AppError('MFA is already enabled', 400, 'MFA_ALREADY_ENABLED');
       }
 
-      if (!user.mfaSecret) {
-        throw new AppError(
-          'MFA not enrolled. Please enroll first.',
-          400,
-          'MFA_NOT_ENROLLED'
-        );
-      }
-
-      // Verify TOTP token
-      const isValid = speakeasy.totp.verify({
+      // Verify the TOTP token
+      const verified = speakeasy.totp.verify({
         secret: user.mfaSecret,
         encoding: 'base32',
-        token,
-        window: 2, // Allow 2 time steps (±60 seconds)
+        token: token,
+        window: 2, // Allow 2 time steps before/after for clock skew
       });
 
-      if (!isValid) {
-        throw new AppError('Invalid verification code', 400, 'INVALID_MFA_TOKEN');
+      if (!verified) {
+        throw new AppError('Invalid verification code', 400, 'INVALID_MFA_CODE');
       }
 
       // Enable MFA
@@ -117,43 +111,53 @@ class MFAService {
         throw error;
       }
       logger.error('MFA verification error:', error);
-      throw new AppError('Failed to verify MFA', 500, 'MFA_VERIFICATION_ERROR');
+      throw new AppError('Failed to verify MFA code', 500, 'MFA_VERIFICATION_ERROR');
     }
   }
 
   /**
-   * Verify TOTP token during login
+   * Verify MFA code during login
    */
-  public async verifyMFAToken(userId: string, token: string): Promise<boolean> {
+  public async verifyMFALogin(userId: string, token: string): Promise<boolean> {
     try {
       const user = await User.findByPk(userId);
 
-      if (!user || !user.mfaEnabled || !user.mfaSecret) {
-        throw new AppError('MFA not enabled for this account', 400, 'MFA_NOT_ENABLED');
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
       }
 
-      // Verify TOTP token
-      const isValid = speakeasy.totp.verify({
+      if (!user.mfaEnabled || !user.mfaSecret) {
+        throw new AppError('MFA is not enabled for this account', 400, 'MFA_NOT_ENABLED');
+      }
+
+      // Verify the TOTP token
+      const verified = speakeasy.totp.verify({
         secret: user.mfaSecret,
         encoding: 'base32',
-        token,
-        window: 2, // Allow 2 time steps (±60 seconds)
+        token: token,
+        window: 2, // Allow 2 time steps before/after for clock skew
       });
 
-      return isValid;
+      if (!verified) {
+        logger.warn(`Failed MFA login attempt for user: ${userId}`);
+        return false;
+      }
+
+      logger.info(`Successful MFA verification for user: ${userId}`);
+      return true;
     } catch (error) {
-      logger.error('MFA token verification error:', error);
-      return false;
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('MFA login verification error:', error);
+      throw new AppError('Failed to verify MFA code', 500, 'MFA_LOGIN_VERIFICATION_ERROR');
     }
   }
 
   /**
-   * Disable MFA for user
+   * Disable MFA for a user (requires verification)
    */
-  public async disableMFA(
-    userId: string,
-    token: string
-  ): Promise<{ success: boolean; message: string }> {
+  public async disableMFA(userId: string, token: string): Promise<MFAVerificationResponse> {
     try {
       const user = await User.findByPk(userId);
 
@@ -165,14 +169,19 @@ class MFAService {
         throw new AppError('MFA is not enabled', 400, 'MFA_NOT_ENABLED');
       }
 
-      // Verify current TOTP token before disabling
-      const isValid = await this.verifyMFAToken(userId, token);
+      // Verify the TOTP token before disabling
+      const verified = speakeasy.totp.verify({
+        secret: user.mfaSecret!,
+        encoding: 'base32',
+        token: token,
+        window: 2,
+      });
 
-      if (!isValid) {
-        throw new AppError('Invalid verification code', 400, 'INVALID_MFA_TOKEN');
+      if (!verified) {
+        throw new AppError('Invalid verification code', 400, 'INVALID_MFA_CODE');
       }
 
-      // Disable MFA and remove secret
+      // Disable MFA
       user.mfaEnabled = false;
       user.mfaSecret = undefined;
       await user.save();
@@ -189,46 +198,6 @@ class MFAService {
       }
       logger.error('MFA disable error:', error);
       throw new AppError('Failed to disable MFA', 500, 'MFA_DISABLE_ERROR');
-    }
-  }
-
-  /**
-   * Generate backup codes for MFA
-   */
-  private generateBackupCodes(count: number): string[] {
-    const codes: string[] = [];
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-    for (let i = 0; i < count; i++) {
-      let code = '';
-      for (let j = 0; j < 10; j++) {
-        code += characters.charAt(Math.floor(Math.random() * characters.length));
-      }
-      // Format as XXXXX-XXXXX
-      codes.push(`${code.slice(0, 5)}-${code.slice(5)}`);
-    }
-
-    return codes;
-  }
-
-  /**
-   * Get MFA status for user
-   */
-  public async getMFAStatus(userId: string): Promise<{ enabled: boolean; enrolled: boolean }> {
-    try {
-      const user = await User.findByPk(userId);
-
-      if (!user) {
-        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
-      }
-
-      return {
-        enabled: user.mfaEnabled,
-        enrolled: !!user.mfaSecret,
-      };
-    } catch (error) {
-      logger.error('Get MFA status error:', error);
-      throw new AppError('Failed to get MFA status', 500, 'MFA_STATUS_ERROR');
     }
   }
 }

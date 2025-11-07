@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: communication-service
+  namespace: sos-app
+  labels:
+    app: communication-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3006
+      targetPort: 3006
+      protocol: TCP
+      name: http
+  selector:
+    app: communication-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: communication-service
+  namespace: sos-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: communication-service
+  template:
+    metadata:
+      labels:
+        app: communication-service
+    spec:
+      containers:
+        - name: communication-service
+          image: sos-app/communication-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3006
+              name: http
+          env:
+            - name: PORT
+              value: "3006"
+            - name: MONGODB_URI
+              value: "mongodb://$(MONGODB_ROOT_USERNAME):$(MONGODB_ROOT_PASSWORD)@mongodb:27017/sos_communication_db?authSource=admin"
+            - name: MONGODB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: mongodb-root-username
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-credentials
+                  key: mongodb-root-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: jwt-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

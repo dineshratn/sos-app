@@ -1,52 +1,57 @@
 import { Sequelize } from 'sequelize-typescript';
 import config from '../config';
 import logger from '../utils/logger';
-import UserProfile from '../models/UserProfile';
-import EmergencyContact from '../models/EmergencyContact';
+import path from 'path';
 
+// Create Sequelize instance
 const sequelize = new Sequelize({
+  database: config.database.name,
+  username: config.database.user,
+  password: config.database.password,
   host: config.database.host,
   port: config.database.port,
-  database: config.database.name,
-  username: config.database.username,
-  password: config.database.password,
   dialect: config.database.dialect,
+  pool: config.database.pool,
   logging: config.database.logging ? (msg) => logger.debug(msg) : false,
-  models: [UserProfile, EmergencyContact],
-  pool: {
-    max: 10,
-    min: 2,
-    acquire: 30000,
-    idle: 10000,
-  },
+  models: [path.join(__dirname, '../models')],
 });
 
+/**
+ * Test database connection
+ */
 export const connectDatabase = async (): Promise<void> => {
   try {
     await sequelize.authenticate();
-    logger.info('Database connection established successfully');
+    logger.info('✅ Database connection established successfully');
   } catch (error) {
-    logger.error('Unable to connect to the database:', error);
+    logger.error('❌ Unable to connect to database:', error);
     throw error;
   }
 };
 
-export const syncDatabase = async (force = false): Promise<void> => {
+/**
+ * Sync database models
+ * @param force If true, drops existing tables
+ */
+export const syncDatabase = async (force: boolean = false): Promise<void> => {
   try {
-    await sequelize.sync({ force });
-    logger.info(`Database synchronized ${force ? '(forced)' : ''}`);
+    await sequelize.sync({ force, alter: !force && config.nodeEnv === 'development' });
+    logger.info(`✅ Database synchronized ${force ? '(forced)' : ''}`);
   } catch (error) {
-    logger.error('Database sync failed:', error);
+    logger.error('❌ Database sync failed:', error);
     throw error;
   }
 };
 
+/**
+ * Close database connection
+ */
 export const closeDatabase = async (): Promise<void> => {
   try {
     await sequelize.close();
-    logger.info('Database connection closed');
+    logger.info('✅ Database connection closed');
   } catch (error) {
-    logger.error('Error closing database connection:', error);
+    logger.error('❌ Error closing database connection:', error);
     throw error;
   }
 };
