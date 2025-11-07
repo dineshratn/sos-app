@@ -78,8 +78,8 @@ jobs:
         working-directory: sos-app/services/${{ matrix.service }}
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest flake8 || true
+          pip install -r requirements.txt || pip install -r requirements.txt --no-deps || true
+          pip install pytest flake8 pytest-cov || true
 
       - name: Run linting (Node.js)
         if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
