@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload Terraform Outputs
         if: github.event.inputs.action == 'apply'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: terraform-outputs
           path: sos-app/infrastructure/terraform/terraform-outputs.json
