@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 
@@ -110,7 +111,7 @@ func (h *WebSocketHandler) handleClientMessage(conn *websocket.Conn, client *ws.
 
 		// Send current location immediately
 		go func() {
-			location, err := h.locationService.GetCurrentLocation(conn.Context(), subscription.EmergencyID)
+			location, err := h.locationService.GetCurrentLocation(context.Background(), subscription.EmergencyID)
 			if err != nil {
 				log.Printf("Failed to get current location: %v", err)
 				return

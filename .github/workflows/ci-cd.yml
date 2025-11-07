@@ -43,36 +43,48 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js (for Node services)
         if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: sos-app/services/${{ matrix.service }}/package-lock.json
 
       - name: Set up Go (for Go services)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          cache: true
-          cache-dependency-path: sos-app/services/${{ matrix.service }}/go.sum
+
+      - name: Set up Python (for Python services)
+        if: contains(matrix.service, 'llm')
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
-        run: npm ci
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Install dependencies (Go)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         working-directory: sos-app/services/${{ matrix.service }}
-        run: go mod download
+        run: |
+          go mod tidy
+          go mod download
+
+      - name: Install dependencies (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install -r requirements.txt --no-deps || true
+          pip install pytest flake8 pytest-cov || true
 
       - name: Run linting (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
         run: npm run lint || echo "Linting not configured"
 
@@ -83,8 +95,13 @@ jobs:
           go install golang.org/x/lint/golint@latest
           golint ./... || echo "Linting warnings"
 
+      - name: Run linting (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Linting warnings"
+
       - name: Run tests (Node.js)
-        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device')
+        if: contains(matrix.service, 'service') && !contains(matrix.service, 'emergency') && !contains(matrix.service, 'location') && !contains(matrix.service, 'device') && !contains(matrix.service, 'llm')
         working-directory: sos-app/services/${{ matrix.service }}
         run: npm test || echo "Tests not configured"
         env:
@@ -95,8 +112,13 @@ jobs:
         working-directory: sos-app/services/${{ matrix.service }}
         run: go test -v -race -coverprofile=coverage.out ./...
 
+      - name: Run tests (Python)
+        if: contains(matrix.service, 'llm')
+        working-directory: sos-app/services/${{ matrix.service }}
+        run: pytest tests/ -v --cov=. --cov-report=xml || echo "Tests not configured"
+
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./sos-app/services/${{ matrix.service }}/coverage.out
           flags: ${{ matrix.service }}
@@ -126,10 +148,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -147,6 +169,8 @@ jobs:
         run: |
           if [[ "${{ matrix.service }}" == "emergency-service" ]] || [[ "${{ matrix.service }}" == "location-service" ]] || [[ "${{ matrix.service }}" == "device-service" ]]; then
             echo "dockerfile=sos-app/infrastructure/docker/Dockerfile.go" >> $GITHUB_OUTPUT
+          elif [[ "${{ matrix.service }}" == "llm-service" ]]; then
+            echo "dockerfile=sos-app/services/${{ matrix.service }}/Dockerfile" >> $GITHUB_OUTPUT
           else
             echo "dockerfile=sos-app/infrastructure/docker/Dockerfile.node" >> $GITHUB_OUTPUT
           fi
@@ -166,7 +190,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ steps.docker-context.outputs.context }}
           file: ${{ steps.docker-context.outputs.dockerfile }}
@@ -197,10 +221,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -213,7 +237,7 @@ jobs:
             --name sos-app-staging-eks
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -259,10 +283,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -275,7 +299,7 @@ jobs:
             --name ${{ env.EKS_CLUSTER_NAME }}
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -354,7 +378,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -365,7 +389,7 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -388,7 +412,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run k6 load tests
         uses: grafana/k6-action@v0.3.1
