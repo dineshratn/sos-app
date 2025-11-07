@@ -71,7 +71,9 @@ jobs:
       - name: Install dependencies (Go)
         if: contains(matrix.service, 'emergency') || contains(matrix.service, 'location') || contains(matrix.service, 'device')
         working-directory: sos-app/services/${{ matrix.service }}
-        run: go mod download
+        run: |
+          go mod tidy
+          go mod download
 
       - name: Install dependencies (Python)
         if: contains(matrix.service, 'llm')
