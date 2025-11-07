@@ -101,7 +101,7 @@ export default class MedicalMedication extends Model<
   prescribedBy?: string;
 
   @Column({
-    type: DataTypes.DATEONLY,
+    type: DataType.DATEONLY,
     allowNull: true,
     comment: 'Date when medication was started',
   })

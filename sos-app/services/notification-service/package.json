@@ -28,7 +28,7 @@
     "ioredis": "^5.3.2",
     "kafkajs": "^2.2.4",
     "firebase-admin": "^11.11.1",
-    "node-apn": "^3.0.0",
+    "@parse/node-apn": "^6.0.0",
     "twilio": "^4.19.0",
     "@sendgrid/mail": "^7.7.0",
     "dotenv": "^16.3.1",
