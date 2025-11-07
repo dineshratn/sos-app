@@ -1,0 +1,57 @@
+apiVersion: v2
+name: sos-app
+description: Umbrella Helm chart for SOS App - deploys all microservices
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - sos-app
+  - microservices
+  - emergency
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com
+sources:
+  - https://github.com/your-org/sos-app
+
+dependencies:
+  - name: auth-service
+    version: "1.0.0"
+    repository: "file://../auth-service"
+    condition: auth-service.enabled
+  - name: user-service
+    version: "1.0.0"
+    repository: "file://../user-service"
+    condition: user-service.enabled
+  - name: medical-service
+    version: "1.0.0"
+    repository: "file://../medical-service"
+    condition: medical-service.enabled
+  - name: emergency-service
+    version: "1.0.0"
+    repository: "file://../emergency-service"
+    condition: emergency-service.enabled
+  - name: location-service
+    version: "1.0.0"
+    repository: "file://../location-service"
+    condition: location-service.enabled
+  - name: notification-service
+    version: "1.0.0"
+    repository: "file://../notification-service"
+    condition: notification-service.enabled
+  - name: communication-service
+    version: "1.0.0"
+    repository: "file://../communication-service"
+    condition: communication-service.enabled
+  - name: device-service
+    version: "1.0.0"
+    repository: "file://../device-service"
+    condition: device-service.enabled
+  - name: api-gateway
+    version: "1.0.0"
+    repository: "file://../api-gateway"
+    condition: api-gateway.enabled
+  - name: llm-service
+    version: "1.0.0"
+    repository: "file://../llm-service"
+    condition: llm-service.enabled

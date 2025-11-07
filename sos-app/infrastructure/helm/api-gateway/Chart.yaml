@@ -1,0 +1,14 @@
+apiVersion: v2
+name: api-gateway
+description: A Helm chart for SOS App api-gateway
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - microservice
+  - sos-app
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com
+sources:
+  - https://github.com/your-org/sos-app
