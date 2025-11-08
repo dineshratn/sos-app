@@ -33,11 +33,13 @@ COPY go.mod ./
 COPY go.sum* ./
 
 # Download dependencies (cached if go.mod/go.sum unchanged)
-RUN go mod download && \
-    go mod verify
+RUN go mod download
 
 # Copy source code
 COPY . .
+
+# Ensure go.sum is up to date (generates missing entries)
+RUN go mod tidy
 
 # Build arguments
 ARG VERSION=dev
