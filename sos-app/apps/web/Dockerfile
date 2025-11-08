@@ -1,4 +1,4 @@
-# Multi-stage build for Node.js service with debug support
+# Multi-stage build for Next.js frontend
 FROM node:20-alpine as builder
 
 WORKDIR /app
@@ -12,8 +12,12 @@ COPY package.json package-lock.json ./
 # Install dependencies
 RUN npm ci --legacy-peer-deps
 
-# Build TypeScript
-RUN npm run build -- --projects=@sos-app/medical-service
+# Copy app code
+COPY apps/web ./apps/web
+COPY libs ./libs
+
+# Build Next.js
+RUN npm run build -- --projects=@sos-app/web
 
 # Production stage
 FROM node:20-alpine
@@ -30,11 +34,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --only=production --legacy-peer-deps
 
 # Copy built application from builder
-COPY --from=builder /app/services/medical-service/dist ./dist
+COPY --from=builder /app/apps/web/.next ./apps/web/.next
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY apps/web/package.json ./apps/web/
 
-EXPOSE 3000 9229
+EXPOSE 3000
 
 ENTRYPOINT ["/sbin/dumb-init", "--"]
 
-# Run with Node inspect enabled for debugging
-CMD ["node", "--inspect=0.0.0.0:9229", "dist/index.js"]
+# Run Next.js production server
+CMD ["npm", "run", "start", "--workspace=@sos-app/web"]

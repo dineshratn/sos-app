@@ -1,12 +1,10 @@
-# Multi-stage build for Device Service (Go)
-
-# Stage 1: Build
-FROM golang:1.23-alpine AS builder
+# Multi-stage build for Go service with debug support
+FROM golang:1.21-alpine as builder
 
 WORKDIR /app
 
-# Install git and build dependencies
-RUN apk add --no-cache git
+# Install build dependencies
+RUN apk add --no-cache git make
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -17,42 +15,37 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o device-service cmd/server/main.go
+# Build with debug symbols (dlv)
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o app .
 
-# Stage 2: Production
-FROM alpine:3.18
+# Debug stage for development
+FROM golang:1.21-alpine as debug
 
 WORKDIR /app
 
-# Install ca-certificates for HTTPS and MQTT TLS
-RUN apk --no-cache add ca-certificates
+# Install delve debugger
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Copy built binary from builder
+COPY --from=builder /app/app /app/app
+COPY . .
 
-# Copy binary from builder
-COPY --from=builder /app/device-service ./device-service
+EXPOSE 3000 40000
 
-# Copy configuration files
-COPY --from=builder /app/configs ./configs
+# Run with delve debugger
+CMD ["dlv", "exec", "/app/app", "--headless", "--listen=0.0.0.0:40000", "--api-version=2"]
 
-# Copy database migrations
-COPY --from=builder /app/internal/db/migrations ./migrations
+# Production stage (doesn't include debugger)
+FROM alpine:latest as production
 
-# Change ownership
-RUN chown -R appuser:appuser /app
+WORKDIR /app
 
-# Switch to non-root user
-USER appuser
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates curl
 
-# Expose port
-EXPOSE 8082
+# Copy built application
+COPY --from=builder /app/app /app/app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8082/health || exit 1
+EXPOSE 3000
 
-# Run the application
-CMD ["./device-service"]
+CMD ["/app/app"]
