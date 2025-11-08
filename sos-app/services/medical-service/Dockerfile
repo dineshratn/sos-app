@@ -27,7 +27,8 @@ RUN apk add --no-cache dumb-init curl
 COPY package.json package-lock.json ./
 
 # Install production dependencies
-RUN npm ci --only=production --legacy-peer-deps
+ENV HUSKY=0
+RUN npm ci --omit=dev --legacy-peer-deps
 
 # Copy built application from builder
 COPY --from=builder /app/services/medical-service/dist ./dist
