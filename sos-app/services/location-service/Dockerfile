@@ -1,25 +1,25 @@
 # Multi-stage build for Go service with debug support
-FROM golang:1.21-alpine as builder
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
 RUN apk add --no-cache git make
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy go mod files (go.sum may not exist yet)
+COPY services/location-service/go.* ./
 
 # Download dependencies
 RUN go mod download
 
 # Copy source code
-COPY . .
+COPY services/location-service/ .
 
 # Build with debug symbols (dlv)
 RUN CGO_ENABLED=0 GOOS=linux go build -v -o app .
 
 # Debug stage for development
-FROM golang:1.21-alpine as debug
+FROM golang:1.21-alpine AS debug
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ EXPOSE 3000 40000
 CMD ["dlv", "exec", "/app/app", "--headless", "--listen=0.0.0.0:40000", "--api-version=2"]
 
 # Production stage (doesn't include debugger)
-FROM alpine:latest as production
+FROM alpine:latest AS production
 
 WORKDIR /app
 

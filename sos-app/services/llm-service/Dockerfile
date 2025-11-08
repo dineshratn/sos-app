@@ -1,5 +1,5 @@
 # Multi-stage build for Python service
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY services/llm-service/requirements.txt .
 
 # Install Python dependencies in a virtual environment
 RUN python -m venv /opt/venv
