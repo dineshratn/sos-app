@@ -29,7 +29,8 @@ RUN addgroup -g 1001 -S goapp && \
 WORKDIR /build
 
 # Copy go mod files first for better layer caching
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY go.sum* ./
 
 # Download dependencies (cached if go.mod/go.sum unchanged)
 RUN go mod download && \
@@ -48,12 +49,13 @@ ARG GIT_COMMIT
 #   -s: Omit symbol table (reduce size)
 #   -w: Omit DWARF debug info (reduce size)
 #   -X: Set version information at compile time
+# Note: Auto-detects main package (supports ./main.go, ./cmd/main.go, ./cmd/server/main.go)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -a \
     -installsuffix cgo \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${GIT_COMMIT}" \
     -o /build/app \
-    ./cmd/main.go
+    .
 
 # Compress binary with UPX (optional, can reduce size by 50-70%)
 # Comment out if you prefer faster startup over smaller size
@@ -121,7 +123,8 @@ RUN addgroup -g 1001 -S goapp && \
 WORKDIR /app
 
 # Copy go mod files
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY go.sum* ./
 
 # Download dependencies
 RUN go mod download
@@ -130,7 +133,7 @@ RUN go mod download
 COPY . .
 
 # Build with debug symbols for delve
-RUN go build -gcflags="all=-N -l" -o /app/app-debug ./cmd/main.go
+RUN go build -gcflags="all=-N -l" -o /app/app-debug .
 
 # Change ownership
 RUN chown -R goapp:goapp /app
