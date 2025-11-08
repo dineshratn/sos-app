@@ -141,7 +141,10 @@ export function maskString(
 export function maskEmail(email: string): string {
   if (!email || !email.includes('@')) return email;
 
-  const [localPart, domain] = email.split('@');
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;
+
+  const [localPart, domain] = parts as [string, string];
   const maskedLocal = maskString(localPart, 1, 1);
 
   return `${maskedLocal}@${domain}`;
@@ -220,7 +223,7 @@ export function escapeHtml(str: string): string {
     "'": '&#39;',
   };
 
-  return str.replace(/[&<>"']/g, (char) => htmlEscapes[char]);
+  return str.replace(/[&<>"']/g, (char) => htmlEscapes[char] ?? char);
 }
 
 /**
@@ -240,7 +243,7 @@ export function unescapeHtml(str: string): string {
     '&#39;': "'",
   };
 
-  return str.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => htmlUnescapes[entity]);
+  return str.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => htmlUnescapes[entity] ?? entity);
 }
 
 /**

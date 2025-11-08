@@ -54,7 +54,7 @@ configureGoogleStrategy();
 // configureAppleStrategy(); // Temporarily disabled
 
 // Request logging middleware
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
     userAgent: req.get('user-agent'),
@@ -63,7 +63,7 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoints
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'healthy',
     service: config.serviceName,
@@ -73,7 +73,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/health/startup', (req, res) => {
+app.get('/health/startup', (_req, res) => {
   res.json({
     status: 'started',
     service: config.serviceName,
@@ -81,7 +81,7 @@ app.get('/health/startup', (req, res) => {
   });
 });
 
-app.get('/health/ready', async (req, res) => {
+app.get('/health/ready', async (_req, res) => {
   try {
     // TODO: Add database health check
     res.json({
@@ -99,7 +99,7 @@ app.get('/health/ready', async (req, res) => {
   }
 });
 
-app.get('/health/live', (req, res) => {
+app.get('/health/live', (_req, res) => {
   res.json({
     status: 'alive',
     service: config.serviceName,
@@ -108,7 +108,7 @@ app.get('/health/live', (req, res) => {
 });
 
 // Root endpoint
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.json({
     service: config.serviceName,
     version: '1.0.0',

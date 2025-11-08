@@ -80,7 +80,7 @@ export const authenticateHTTP = (
  */
 export const optionalAuthentication = (
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   try {

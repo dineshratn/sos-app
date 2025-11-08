@@ -305,7 +305,7 @@ router.post('/delivery/confirm', async (req: Request, res: Response) => {
 /**
  * Health check for webhook endpoints
  */
-router.get('/health', (req: Request, res: Response) => {
+router.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
     endpoints: [

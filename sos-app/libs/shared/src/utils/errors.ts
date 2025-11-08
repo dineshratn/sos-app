@@ -245,14 +245,14 @@ export function formatErrorForLogging(
   };
 
   if (error instanceof AppError) {
-    errorInfo.code = error.code;
-    errorInfo.statusCode = error.statusCode;
-    errorInfo.details = error.details;
-    errorInfo.metadata = error.metadata;
+    errorInfo['code'] = error.code;
+    errorInfo['statusCode'] = error.statusCode;
+    errorInfo['details'] = error.details;
+    errorInfo['metadata'] = error.metadata;
   }
 
   if (context) {
-    errorInfo.context = context;
+    errorInfo['context'] = context;
   }
 
   return errorInfo;

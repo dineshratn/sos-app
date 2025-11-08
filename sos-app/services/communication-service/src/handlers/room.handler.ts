@@ -4,7 +4,7 @@
  * Requirement 8.0.1: Communication During Emergencies
  */
 
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import {
   Participant,
   ParticipantRole,

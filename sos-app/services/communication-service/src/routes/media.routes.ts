@@ -151,7 +151,7 @@ router.post(
       });
 
       // Return success response
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message,
         uploadResult
@@ -164,7 +164,7 @@ router.post(
         errorMessage = error.message;
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: errorMessage
       });
@@ -208,14 +208,14 @@ router.post(
 
       logger.info(`Audio transcribed successfully: "${transcriptionResult.transcription}"`);
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         transcription: transcriptionResult
       });
     } catch (error) {
       logger.error('Error transcribing audio:', error);
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: 'Failed to transcribe audio'
       });
@@ -239,14 +239,14 @@ router.get(
 
       const signedUrlResult = await mediaService.generateSignedUrl(key, expiresIn);
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         ...signedUrlResult
       });
     } catch (error) {
       logger.error('Error generating signed URL:', error);
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: 'Failed to generate signed URL'
       });
@@ -258,10 +258,10 @@ router.get(
  * GET /api/v1/media/languages
  * Get supported languages for voice transcription
  */
-router.get('/languages', (req: Request, res: Response) => {
+router.get('/languages', (_req: Request, res: Response) => {
   const languages = voiceToTextService.getSupportedLanguages();
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     languages
   });

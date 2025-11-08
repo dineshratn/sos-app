@@ -132,8 +132,9 @@ MessageSchema.virtual('id').get(function (this: MessageDocument) {
 MessageSchema.set('toJSON', {
   virtuals: true,
   versionKey: false,
-  transform: function (doc, ret) {
+  transform: function (_doc, ret) {
     ret.id = ret._id.toHexString();
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete ret._id;
     return ret;
   }

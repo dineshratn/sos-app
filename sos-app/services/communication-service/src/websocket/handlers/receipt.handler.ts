@@ -58,7 +58,7 @@ export class ReceiptHandler {
       }
 
       // Update message in database
-      const updatedMessage = await MessageModel.markAsDelivered(messageId, userId);
+      const updatedMessage = await (MessageModel as any).markAsDelivered(messageId, userId);
 
       if (!updatedMessage) {
         logger.warn(`Message not found for delivery receipt: ${messageId}`);
@@ -116,7 +116,7 @@ export class ReceiptHandler {
       }
 
       // Update message in database
-      const updatedMessage = await MessageModel.markAsRead(messageId, userId);
+      const updatedMessage = await (MessageModel as any).markAsRead(messageId, userId);
 
       if (!updatedMessage) {
         logger.warn(`Message not found for read receipt: ${messageId}`);

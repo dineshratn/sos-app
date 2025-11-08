@@ -12,7 +12,6 @@ import {
   BelongsTo,
   Index,
 } from 'sequelize-typescript';
-import { v4 as uuidv4 } from 'uuid';
 import User from './User';
 
 export interface SessionAttributes {
@@ -56,7 +55,7 @@ export default class Session extends Model<SessionAttributes, SessionCreationAtt
   @PrimaryKey
   @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
-  id!: string;
+  declare id: string;
 
   @ForeignKey(() => User)
   @AllowNull(false)
@@ -96,10 +95,10 @@ export default class Session extends Model<SessionAttributes, SessionCreationAtt
   lastActiveAt!: Date;
 
   @CreatedAt
-  createdAt!: Date;
+  declare createdAt: Date;
 
   @UpdatedAt
-  updatedAt!: Date;
+  declare updatedAt: Date;
 
   // Associations
   @BelongsTo(() => User)

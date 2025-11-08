@@ -89,13 +89,13 @@ router.get(
       // await authorizeEmergencyAccess(req.userId, emergencyId, req.userRole);
 
       // Fetch messages from MongoDB
-      const messages = await MessageModel.findByEmergencyWithPagination(
+      const messages = await (MessageModel as any).findByEmergencyWithPagination(
         emergencyId,
         queryOptions
       );
 
       // Get total count for pagination
-      const total = await MessageModel.countByEmergency(emergencyId);
+      const total = await (MessageModel as any).countByEmergency(emergencyId);
       const hasMore = offset + limit < total;
 
       logger.info(
@@ -110,7 +110,7 @@ router.get(
         hasMore
       };
 
-      res.status(200).json(response);
+      return res.status(200).json(response);
     } catch (error) {
       logger.error('Error retrieving message history:', error);
       res.status(500).json({
@@ -211,7 +211,7 @@ router.post(
         failedMessages
       };
 
-      res.status(200).json(response);
+      return res.status(200).json(response);
     } catch (error) {
       logger.error('Error syncing offline messages:', error);
       res.status(500).json({

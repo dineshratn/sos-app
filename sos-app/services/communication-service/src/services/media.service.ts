@@ -114,6 +114,8 @@ export class MediaService {
     mimeType: string,
     emergencyId: string
   ): Promise<UploadResult> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 upload not implemented yet, falling back to local storage');
 
     // TODO: Implement AWS S3 upload
@@ -183,6 +185,8 @@ export class MediaService {
     key: string,
     expiresIn: number
   ): Promise<SignedUrlResult> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 signed URL generation not implemented yet');
 
     // TODO: Implement S3 signed URL
@@ -242,7 +246,9 @@ export class MediaService {
    * Delete from S3
    * TODO: Implement S3 deletion
    */
-  private async deleteFromS3(key: string): Promise<void> {
+  private async deleteFromS3(_key: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 delete not implemented yet');
 
     // TODO: Implement S3 deletion

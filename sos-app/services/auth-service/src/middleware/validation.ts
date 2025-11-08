@@ -124,7 +124,7 @@ export const loginValidation: ValidationChain[] = [
     .withMessage('Invalid device type'),
 
   // Custom validation to ensure either email or phoneNumber is provided
-  body().custom((value, { req }) => {
+  body().custom((_value, { req }) => {
     if (!req.body.email && !req.body.phoneNumber) {
       throw new Error('Either email or phone number must be provided');
     }
@@ -169,7 +169,7 @@ export const logoutValidation: ValidationChain[] = [
     .withMessage('allDevices must be a boolean'),
 
   // Custom validation to ensure at least one logout method is provided
-  body().custom((value, { req }) => {
+  body().custom((_value, { req }) => {
     if (!req.body.refreshToken && !req.body.deviceId && !req.body.allDevices) {
       throw new Error('Must provide refreshToken, deviceId, or allDevices flag');
     }

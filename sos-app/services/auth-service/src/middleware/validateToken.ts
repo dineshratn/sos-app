@@ -6,7 +6,7 @@ import logger from '../utils/logger';
 declare global {
   namespace Express {
     interface Request {
-      user?: TokenPayload;
+      tokenPayload?: TokenPayload;
       userId?: string;
       sessionId?: string;
     }
@@ -53,7 +53,7 @@ export const validateToken = async (
       const decoded = verifyAccessToken(token);
 
       // Attach user information to request
-      req.user = decoded;
+      req.tokenPayload = decoded;
       req.userId = decoded.userId;
       req.sessionId = decoded.sessionId;
 
@@ -94,7 +94,7 @@ export const validateToken = async (
  */
 export const optionalAuth = async (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> => {
   const authHeader = req.headers.authorization;
@@ -110,7 +110,7 @@ export const optionalAuth = async (
       const token = parts[1];
       const decoded = verifyAccessToken(token);
 
-      req.user = decoded;
+      req.tokenPayload = decoded;
       req.userId = decoded.userId;
       req.sessionId = decoded.sessionId;
     }
@@ -126,9 +126,9 @@ export const optionalAuth = async (
  * Middleware to check if user has specific permissions
  * Note: This is a placeholder for future role-based access control
  */
-export const requirePermission = (permission: string) => {
+export const requirePermission = (_permission: string) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.user) {
+    if (!req.userId) {
       res.status(401).json({
         success: false,
         error: 'Authentication required',
@@ -149,7 +149,7 @@ export const requirePermission = (permission: string) => {
  */
 export const validateUserOwnership = (userIdParam: string = 'userId') => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!req.user) {
+    if (!req.userId) {
       res.status(401).json({
         success: false,
         error: 'Authentication required',
@@ -160,7 +160,7 @@ export const validateUserOwnership = (userIdParam: string = 'userId') => {
 
     const requestedUserId = req.params[userIdParam] || req.body.userId;
 
-    if (req.user.userId !== requestedUserId) {
+    if (req.userId !== requestedUserId) {
       res.status(403).json({
         success: false,
         error: 'You do not have permission to access this resource',

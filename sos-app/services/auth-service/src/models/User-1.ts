@@ -13,7 +13,6 @@ import {
   Index,
   HasMany,
 } from 'sequelize-typescript';
-import { v4 as uuidv4 } from 'uuid';
 import Session from './Session';
 
 export enum AuthProvider {
@@ -70,7 +69,7 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
   @PrimaryKey
   @Default(DataType.UUIDV4)
   @Column(DataType.UUID)
-  id!: string;
+  declare id: string;
 
   @Unique
   @AllowNull(false)
@@ -131,13 +130,13 @@ export default class User extends Model<UserAttributes, UserCreationAttributes> 
   accountLockedUntil?: Date;
 
   @CreatedAt
-  createdAt!: Date;
+  declare createdAt: Date;
 
   @UpdatedAt
-  updatedAt!: Date;
+  declare updatedAt: Date;
 
   @DeletedAt
-  deletedAt?: Date;
+  declare deletedAt?: Date;
 
   // Associations
   @HasMany(() => Session)

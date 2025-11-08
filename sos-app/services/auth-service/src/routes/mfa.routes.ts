@@ -44,11 +44,7 @@ router.post(
       if (!token) {
         res.status(400).json({
           success: false,
-<<<<<<< HEAD
           error: 'Verification code is required',
-=======
-          error: 'Verification token is required',
->>>>>>> origin/main
           code: 'TOKEN_REQUIRED',
         });
         return;
@@ -56,11 +52,7 @@ router.post(
 
       const result = await mfaService.verifyAndEnableMFA(userId, token);
 
-<<<<<<< HEAD
       logger.info(`MFA verification successful for user: ${userId}`);
-=======
-      logger.info(`MFA verified and enabled for user: ${userId}`);
->>>>>>> origin/main
 
       res.status(200).json(result);
     } catch (error) {
@@ -117,10 +109,6 @@ router.post(
 /**
  * @route   POST /api/v1/auth/mfa/disable
  * @desc    Disable MFA for user account
-=======
- * @route   POST /api/v1/auth/mfa/disable
- * @desc    Disable MFA for the user (requires verification)
->>>>>>> origin/main
  * @access  Private (requires valid access token)
  */
 router.post(
@@ -134,11 +122,7 @@ router.post(
       if (!token) {
         res.status(400).json({
           success: false,
-<<<<<<< HEAD
           error: 'Verification code is required',
-=======
-          error: 'Verification token is required',
->>>>>>> origin/main
           code: 'TOKEN_REQUIRED',
         });
         return;
@@ -155,7 +139,6 @@ router.post(
   }
 );
 
-<<<<<<< HEAD
 /**
  * @route   GET /api/v1/auth/mfa/status
  * @desc    Get MFA status for current user
@@ -180,6 +163,4 @@ router.get(
   }
 );
 
-=======
->>>>>>> origin/main
 export default router;
