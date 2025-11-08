@@ -13,7 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 
 # Build TypeScript
-RUN npm run build -- --projects=@sos-app/medical-service
+RUN npm run build -w services/medical-service
 
 # Production stage
 FROM node:20-alpine

@@ -13,7 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 
 # Build TypeScript
-RUN npm run build -- --projects=@sos-app/notification-service
+RUN npm run build -w services/notification-service
 
 # Production stage
 FROM node:20-alpine

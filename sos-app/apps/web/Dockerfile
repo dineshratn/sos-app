@@ -17,7 +17,7 @@ COPY apps/web ./apps/web
 COPY libs ./libs
 
 # Build Next.js
-RUN npm run build -- --projects=@sos-app/web
+RUN npm run build -w apps/web
 
 # Production stage
 FROM node:20-alpine
@@ -44,4 +44,4 @@ EXPOSE 3000
 ENTRYPOINT ["/sbin/dumb-init", "--"]
 
 # Run Next.js production server
-CMD ["npm", "run", "start", "--workspace=@sos-app/web"]
+CMD ["npm", "run", "start", "-w", "apps/web"]
