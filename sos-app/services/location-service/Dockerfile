@@ -16,7 +16,7 @@ RUN go mod download
 COPY services/location-service/ .
 
 # Build with debug symbols (dlv)
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o app .
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o app ./cmd/server
 
 # Debug stage for development
 FROM golang:1.24-alpine AS debug
@@ -28,7 +28,6 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Copy built binary from builder
 COPY --from=builder /app/app /app/app
-COPY . .
 
 EXPOSE 3000 40000
 
