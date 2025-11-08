@@ -16,7 +16,7 @@ RUN go mod tidy
 COPY services/device-service/ .
 
 # Build with debug symbols (dlv)
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o app ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -v -mod=mod -o app ./cmd/server
 
 # Debug stage for development
 FROM golang:1.24-alpine AS debug
