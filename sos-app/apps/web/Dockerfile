@@ -32,7 +32,7 @@ COPY package.json package-lock.json ./
 
 # Install production dependencies
 ENV HUSKY=0
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --ignore-scripts --omit=dev --legacy-peer-deps
 
 # Copy built application from builder
 COPY --from=builder /app/apps/web/.next ./apps/web/.next
