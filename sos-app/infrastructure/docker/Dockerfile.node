@@ -41,20 +41,12 @@ FROM base AS dependencies
 # Copy package files
 COPY package*.json ./
 
-# Install production dependencies only
+# Install all dependencies (we'll filter later for production)
 # Use npm ci if package-lock.json exists, otherwise use npm install
-RUN if [ -f package-lock.json ]; then \
-        npm ci --omit=dev --ignore-scripts; \
-    else \
-        npm install --omit=dev --ignore-scripts --legacy-peer-deps; \
-    fi && \
-    npm cache clean --force
-
-# Install all dependencies (including dev) in separate layer for build stage
 RUN if [ -f package-lock.json ]; then \
         npm ci --ignore-scripts; \
     else \
-        npm install --ignore-scripts --legacy-peer-deps; \
+        npm install --ignore-scripts --legacy-peer-deps --force; \
     fi && \
     npm cache clean --force
 
@@ -77,7 +69,7 @@ RUN npm run build
 # -----------------------------------------------------------------------------
 FROM base AS production
 
-# Copy production dependencies
+# Copy all dependencies
 COPY --from=dependencies /app/node_modules ./node_modules
 
 # Copy built application from build stage
@@ -85,6 +77,9 @@ COPY --from=build /app/dist ./dist
 
 # Copy package.json for metadata
 COPY package*.json ./
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --omit=dev
 
 # Change ownership to non-root user
 RUN chown -R nodejs:nodejs /app
