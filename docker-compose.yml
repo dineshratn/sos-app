@@ -116,8 +116,8 @@ services:
   # ==================== NODE.JS SERVICES ====================
   api-gateway:
     build:
-      context: ./sos-app/services/api-gateway
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/api-gateway/Dockerfile
     container_name: sos-api-gateway
     depends_on:
       redis:
@@ -157,8 +157,8 @@ services:
 
   auth-service:
     build:
-      context: ./sos-app/services/auth-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/auth-service/Dockerfile
     container_name: sos-auth-service
     depends_on:
       postgres:
@@ -195,8 +195,8 @@ services:
 
   user-service:
     build:
-      context: ./sos-app/services/user-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/user-service/Dockerfile
     container_name: sos-user-service
     depends_on:
       postgres:
@@ -231,8 +231,8 @@ services:
 
   communication-service:
     build:
-      context: ./sos-app/services/communication-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/communication-service/Dockerfile
     container_name: sos-communication-service
     depends_on:
       mongodb:
@@ -270,8 +270,8 @@ services:
 
   medical-service:
     build:
-      context: ./sos-app/services/medical-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/medical-service/Dockerfile
     container_name: sos-medical-service
     depends_on:
       postgres:
@@ -309,8 +309,8 @@ services:
 
   notification-service:
     build:
-      context: ./sos-app/services/notification-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/notification-service/Dockerfile
     container_name: sos-notification-service
     depends_on:
       mongodb:
@@ -349,8 +349,8 @@ services:
   # ==================== GO SERVICES ====================
   device-service:
     build:
-      context: ./sos-app/services/device-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/device-service/Dockerfile
     container_name: sos-device-service
     depends_on:
       postgres:
@@ -384,8 +384,8 @@ services:
 
   location-service:
     build:
-      context: ./sos-app/services/location-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/location-service/Dockerfile
     container_name: sos-location-service
     depends_on:
       postgres:
@@ -419,8 +419,8 @@ services:
 
   emergency-service:
     build:
-      context: ./sos-app/services/emergency-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/emergency-service/Dockerfile
     container_name: sos-emergency-service
     depends_on:
       postgres:
@@ -452,8 +452,8 @@ services:
   # ==================== PYTHON SERVICES ====================
   llm-service:
     build:
-      context: ./sos-app/services/llm-service
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: services/llm-service/Dockerfile
     container_name: sos-llm-service
     depends_on:
       redis:
@@ -482,8 +482,8 @@ services:
   # ==================== FRONTEND ====================
   web:
     build:
-      context: ./sos-app/apps/web
-      dockerfile: Dockerfile
+      context: ./sos-app
+      dockerfile: apps/web/Dockerfile
     container_name: sos-web
     depends_on:
       - api-gateway
