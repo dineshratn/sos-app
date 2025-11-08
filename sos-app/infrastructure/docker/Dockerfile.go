@@ -50,12 +50,13 @@ ARG GIT_COMMIT
 #   -w: Omit DWARF debug info (reduce size)
 #   -X: Set version information at compile time
 # Note: Auto-detects main package (supports ./main.go, ./cmd/main.go, ./cmd/server/main.go)
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN MAIN_PKG=$(find . -name 'main.go' -type f | head -1 | xargs dirname) && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -a \
     -installsuffix cgo \
     -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${GIT_COMMIT}" \
     -o /build/app \
-    .
+    ${MAIN_PKG}
 
 # Compress binary with UPX (optional, can reduce size by 50-70%)
 # Comment out if you prefer faster startup over smaller size
@@ -133,7 +134,8 @@ RUN go mod download
 COPY . .
 
 # Build with debug symbols for delve
-RUN go build -gcflags="all=-N -l" -o /app/app-debug .
+RUN MAIN_PKG=$(find . -name 'main.go' -type f | head -1 | xargs dirname) && \
+    go build -gcflags="all=-N -l" -o /app/app-debug ${MAIN_PKG}
 
 # Change ownership
 RUN chown -R goapp:goapp /app

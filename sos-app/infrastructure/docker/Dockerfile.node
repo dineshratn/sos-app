@@ -46,7 +46,7 @@ COPY package*.json ./
 RUN if [ -f package-lock.json ]; then \
         npm ci --only=production --ignore-scripts; \
     else \
-        npm install --production --ignore-scripts; \
+        npm install --production --ignore-scripts --legacy-peer-deps; \
     fi && \
     npm cache clean --force
 
@@ -54,7 +54,7 @@ RUN if [ -f package-lock.json ]; then \
 RUN if [ -f package-lock.json ]; then \
         npm ci --only=development --ignore-scripts; \
     else \
-        npm install --only=development --ignore-scripts; \
+        npm install --only=development --ignore-scripts --legacy-peer-deps; \
     fi && \
     npm cache clean --force
 
