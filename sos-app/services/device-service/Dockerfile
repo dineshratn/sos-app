@@ -9,8 +9,8 @@ RUN apk add --no-cache git make
 # Copy go mod files (go.sum may not exist yet)
 COPY services/device-service/go.* ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies and create go.sum if missing
+RUN go mod tidy
 
 # Copy source code
 COPY services/device-service/ .
