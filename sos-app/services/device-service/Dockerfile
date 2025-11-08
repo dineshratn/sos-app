@@ -1,5 +1,5 @@
 # Multi-stage build for Go service with debug support
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ COPY services/device-service/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -v -o app .
 
 # Debug stage for development
-FROM golang:1.21-alpine AS debug
+FROM golang:1.24-alpine AS debug
 
 WORKDIR /app
 
