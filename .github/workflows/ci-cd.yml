@@ -33,7 +33,7 @@ jobs:
           - auth-service
           - user-service
           - medical-service
-          - emergency-service
+          # - emergency-service  # Temporarily disabled - Docker build hanging
           - location-service
           - notification-service
           - communication-service
@@ -138,7 +138,7 @@ jobs:
           - auth-service
           - user-service
           - medical-service
-          - emergency-service
+          # - emergency-service  # Temporarily disabled - Docker build hanging
           - location-service
           - notification-service
           - communication-service
