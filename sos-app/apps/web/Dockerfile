@@ -9,12 +9,13 @@ RUN apk add --no-cache python3 make g++
 # Copy monorepo files
 COPY package.json package-lock.json ./
 
+# Copy all services and libs to recognize workspace structure
+COPY services ./services
+COPY apps ./apps
+COPY libs ./libs
+
 # Install dependencies
 RUN npm ci --legacy-peer-deps
-
-# Copy app code
-COPY apps/web ./apps/web
-COPY libs ./libs
 
 # Build Next.js
 RUN npm run build -w apps/web

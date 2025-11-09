@@ -9,6 +9,10 @@ RUN apk add --no-cache python3 make g++
 # Copy monorepo files
 COPY package.json package-lock.json ./
 
+# Copy all services and libs to recognize workspace structure
+COPY services ./services
+COPY libs ./libs
+
 # Install dependencies
 RUN npm ci --legacy-peer-deps
 
