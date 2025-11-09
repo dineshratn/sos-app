@@ -59,7 +59,7 @@ export const errorHandler = (
 /**
  * 404 Not Found handler
  */
-export const notFoundHandler = (_req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (_req: Request, _res: Response, next: NextFunction) => {
   const error = new AppError(
     `Route ${_req.method} ${_req.path} not found`,
     404,
