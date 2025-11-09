@@ -1,257 +1,225 @@
-import { Router, Request, Response } from 'express';
-import Message from '../models/Message';
-import { authenticateRequest, AuthenticatedRequest } from '../middleware/auth.middleware';
+/**
+ * Message Routes
+ * Task 129: GET message history endpoint with pagination
+ * Task 135: POST offline sync endpoint
+ */
+
+import { Router } from 'express';
+import Joi from 'joi';
+import MessageModel from '../db/schemas/message.schema';
+import { authenticateHTTP, AuthenticatedRequest } from '../middleware/auth.http.middleware';
+import {
+  MessageHistoryResponse,
+  OfflineSyncRequest,
+  OfflineSyncResponse,
+  MessageType,
+  SenderRole
+} from '../models/Message';
 import logger from '../utils/logger';
+import kafkaService from '../services/kafka.service';
 
 const router = Router();
 
+// Validation schema for message history query
+const messageHistorySchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(100).default(50),
+  offset: Joi.number().integer().min(0).default(0),
+  before: Joi.date().iso().optional(),
+  after: Joi.date().iso().optional()
+});
+
+// Validation schema for offline sync
+const offlineSyncSchema = Joi.object({
+  emergencyId: Joi.string().required(),
+  messages: Joi.array()
+    .items(
+      Joi.object({
+        senderId: Joi.string().required(),
+        type: Joi.string()
+          .valid(...Object.values(MessageType))
+          .required(),
+        content: Joi.string().required().max(10000),
+        metadata: Joi.object().optional(),
+        senderRole: Joi.string()
+          .valid(...Object.values(SenderRole))
+          .optional()
+      })
+    )
+    .required()
+});
+
 /**
  * GET /api/v1/messages/:emergencyId
- * Get message history for an emergency with pagination
+ * Retrieve message history for an emergency with pagination
  */
 router.get(
   '/:emergencyId',
-  authenticateRequest,
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  authenticateHTTP,
+  async (req: AuthenticatedRequest, res) => {
     try {
       const { emergencyId } = req.params;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const before = req.query.before ? new Date(req.query.before as string) : undefined;
 
-      // Validate limit
-      if (limit < 1 || limit > 100) {
-        res.status(400).json({
-          error: {
-            code: 'INVALID_LIMIT',
-            message: 'Limit must be between 1 and 100',
-          },
-        });
-        return;
+      // Validate query parameters
+      const { error, value } = messageHistorySchema.validate(req.query);
+      if (error) {
+        logger.warn(`Message history validation failed:`, error.details);
+        return res.status(400).json({
+          success: false,
+          error: `Validation error: ${error.details[0].message}`
+        } as MessageHistoryResponse);
       }
 
-      // Build query
-      const query: any = {
-        emergencyId,
-        deletedAt: { $exists: false },
+      const { limit, offset, before, after } = value;
+
+      // Build query options
+      const queryOptions: any = {
+        limit,
+        offset
       };
 
       if (before) {
-        query.createdAt = { $lt: before };
+        queryOptions.before = new Date(before);
       }
 
-      // Fetch messages
-      const messages = await Message.find(query)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .lean();
+      if (after) {
+        queryOptions.after = new Date(after);
+      }
 
-      // Transform messages for response
-      const messagesResponse = messages.map((msg: any) => ({
-        id: msg._id.toString(),
-        emergencyId: msg.emergencyId,
-        senderId: msg.senderId,
-        senderName: msg.senderName,
-        senderRole: msg.senderRole,
-        type: msg.type,
-        content: msg.content,
-        metadata: msg.metadata,
-        delivered: msg.delivered,
-        read: msg.read,
-        deliveredAt: msg.deliveredAt,
-        readAt: msg.readAt,
-        createdAt: msg.createdAt,
-        updatedAt: msg.updatedAt,
-      }));
+      // TODO: In production, verify user has access to this emergency room
+      // await authorizeEmergencyAccess(req.userId, emergencyId, req.userRole);
 
-      res.status(200).json({
-        messages: messagesResponse,
-        count: messagesResponse.length,
-        hasMore: messagesResponse.length === limit,
-        pagination: {
-          limit,
-          before: before?.toISOString(),
-          nextBefore: messagesResponse.length > 0
-            ? messagesResponse[messagesResponse.length - 1].createdAt
-            : undefined,
-        },
-      });
-
-      logger.info('Message history retrieved', {
+      // Fetch messages from MongoDB
+      const messages = await (MessageModel as any).findByEmergencyWithPagination(
         emergencyId,
-        userId: req.user?.userId,
-        count: messagesResponse.length,
-      });
+        queryOptions
+      );
 
-    } catch (error: any) {
-      logger.error('Error retrieving message history', {
-        emergencyId: req.params.emergencyId,
-        userId: req.user?.userId,
-        error: error.message,
-      });
+      // Get total count for pagination
+      const total = await (MessageModel as any).countByEmergency(emergencyId);
+      const hasMore = offset + limit < total;
 
+      logger.info(
+        `Retrieved ${messages.length} messages for emergency ${emergencyId} ` +
+        `(offset: ${offset}, limit: ${limit}, total: ${total})`
+      );
+
+      const response: MessageHistoryResponse = {
+        success: true,
+        messages,
+        total,
+        hasMore
+      };
+
+      return res.status(200).json(response);
+    } catch (error) {
+      logger.error('Error retrieving message history:', error);
       res.status(500).json({
-        error: {
-          code: 'FETCH_MESSAGES_FAILED',
-          message: 'Failed to retrieve message history',
-        },
-      });
+        success: false,
+        messages: [],
+        total: 0,
+        hasMore: false,
+        error: 'An error occurred while retrieving messages'
+      } as MessageHistoryResponse);
     }
   }
 );
 
 /**
  * POST /api/v1/messages/sync
- * Sync offline messages (batch create)
+ * Sync offline messages (batch upload)
  */
 router.post(
   '/sync',
-  authenticateRequest,
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  authenticateHTTP,
+  async (req: AuthenticatedRequest, res) => {
     try {
-      const user = req.user!;
-      const { messages } = req.body;
-
-      if (!messages || !Array.isArray(messages)) {
-        res.status(400).json({
-          error: {
-            code: 'INVALID_REQUEST',
-            message: 'messages array is required',
-          },
-        });
-        return;
+      // Validate request body
+      const { error, value } = offlineSyncSchema.validate(req.body);
+      if (error) {
+        logger.warn(`Offline sync validation failed:`, error.details);
+        return res.status(400).json({
+          success: false,
+          syncedMessages: [],
+          failedMessages: [],
+          error: `Validation error: ${error.details[0].message}`
+        } as OfflineSyncResponse);
       }
 
-      if (messages.length === 0) {
-        res.status(200).json({
-          synced: 0,
-          messages: [],
-        });
-        return;
+      const { emergencyId, messages } = value as OfflineSyncRequest;
+
+      // TODO: Verify user has access to this emergency room
+      // await authorizeEmergencyAccess(req.userId, emergencyId, req.userRole);
+
+      const syncedMessages: any[] = [];
+      const failedMessages: string[] = [];
+
+      // Process each message
+      for (let i = 0; i < messages.length; i++) {
+        try {
+          const msgData = messages[i];
+
+          // Verify sender matches authenticated user
+          if (msgData.senderId !== req.userId) {
+            logger.warn(`Offline sync: Sender mismatch for message ${i}`);
+            failedMessages.push(`Message ${i}: Sender ID mismatch`);
+            continue;
+          }
+
+          // Create and save message
+          const messageDoc = new MessageModel({
+            emergencyId,
+            senderId: msgData.senderId,
+            senderRole: msgData.senderRole || SenderRole.USER,
+            type: msgData.type,
+            content: msgData.content,
+            metadata: msgData.metadata || {},
+            status: 'SENT',
+            deliveredTo: [],
+            readBy: []
+          });
+
+          const savedMessage = await messageDoc.save();
+          const message = savedMessage.toJSON();
+
+          syncedMessages.push(message);
+
+          // Publish to Kafka
+          await kafkaService.publishMessageSentEvent({
+            emergencyId,
+            messageId: message.id,
+            senderId: msgData.senderId,
+            messageType: msgData.type
+          });
+
+          logger.info(
+            `Offline message synced: ${message.id} for emergency ${emergencyId}`
+          );
+        } catch (msgError) {
+          logger.error(`Error syncing message ${i}:`, msgError);
+          failedMessages.push(`Message ${i}: ${msgError instanceof Error ? msgError.message : 'Unknown error'}`);
+        }
       }
 
-      if (messages.length > 100) {
-        res.status(400).json({
-          error: {
-            code: 'TOO_MANY_MESSAGES',
-            message: 'Cannot sync more than 100 messages at once',
-          },
-        });
-        return;
-      }
+      logger.info(
+        `Offline sync completed for emergency ${emergencyId}: ` +
+        `${syncedMessages.length} synced, ${failedMessages.length} failed`
+      );
 
-      // Validate and prepare messages
-      const messagesToInsert = messages.map((msg: any) => ({
-        emergencyId: msg.emergencyId,
-        senderId: user.userId,
-        senderName: user.username || user.email || 'Unknown User',
-        senderRole: msg.senderRole || 'USER',
-        type: msg.type || 'TEXT',
-        content: msg.content,
-        metadata: msg.metadata || {},
-        delivered: false,
-        read: false,
-        createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-      }));
+      const response: OfflineSyncResponse = {
+        success: true,
+        syncedMessages,
+        failedMessages
+      };
 
-      // Insert messages in bulk
-      const insertedMessages = await Message.insertMany(messagesToInsert, {
-        ordered: false, // Continue on error
-      });
-
-      logger.info('Offline messages synced', {
-        userId: user.userId,
-        count: insertedMessages.length,
-      });
-
-      res.status(200).json({
-        synced: insertedMessages.length,
-        messages: insertedMessages.map((msg: any) => ({
-          id: msg._id.toString(),
-          emergencyId: msg.emergencyId,
-          createdAt: msg.createdAt,
-        })),
-      });
-
-    } catch (error: any) {
-      logger.error('Error syncing offline messages', {
-        userId: req.user?.userId,
-        error: error.message,
-      });
-
+      return res.status(200).json(response);
+    } catch (error) {
+      logger.error('Error syncing offline messages:', error);
       res.status(500).json({
-        error: {
-          code: 'SYNC_MESSAGES_FAILED',
-          message: 'Failed to sync offline messages',
-        },
-      });
-    }
-  }
-);
-
-/**
- * DELETE /api/v1/messages/:messageId
- * Soft delete a message
- */
-router.delete(
-  '/:messageId',
-  authenticateRequest,
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const { messageId } = req.params;
-      const user = req.user!;
-
-      // Find message
-      const message = await Message.findById(messageId);
-
-      if (!message) {
-        res.status(404).json({
-          error: {
-            code: 'MESSAGE_NOT_FOUND',
-            message: 'Message not found',
-          },
-        });
-        return;
-      }
-
-      // Check if user owns the message
-      if (message.senderId !== user.userId) {
-        res.status(403).json({
-          error: {
-            code: 'FORBIDDEN',
-            message: 'You can only delete your own messages',
-          },
-        });
-        return;
-      }
-
-      // Soft delete
-      message.deletedAt = new Date();
-      await message.save();
-
-      logger.info('Message soft deleted', {
-        messageId,
-        userId: user.userId,
-        emergencyId: message.emergencyId,
-      });
-
-      res.status(200).json({
-        message: 'Message deleted successfully',
-        messageId,
-      });
-
-    } catch (error: any) {
-      logger.error('Error deleting message', {
-        messageId: req.params.messageId,
-        userId: req.user?.userId,
-        error: error.message,
-      });
-
-      res.status(500).json({
-        error: {
-          code: 'DELETE_MESSAGE_FAILED',
-          message: 'Failed to delete message',
-        },
-      });
+        success: false,
+        syncedMessages: [],
+        failedMessages: [],
+        error: 'An error occurred while syncing messages'
+      } as OfflineSyncResponse);
     }
   }
 );

@@ -1,160 +1,139 @@
+/**
+ * Kafka Service
+ * Handles Kafka producer for publishing communication events
+ */
+
 import { Kafka, Producer, ProducerRecord } from 'kafkajs';
-import config from '../config';
 import logger from '../utils/logger';
 
-let producer: Producer;
-let kafka: Kafka;
+export class KafkaService {
+  private kafka: Kafka;
+  private producer: Producer | null = null;
+  private isConnected: boolean = false;
 
-/**
- * Initialize Kafka producer
- */
-export const initializeKafkaProducer = async (): Promise<void> => {
-  try {
-    kafka = new Kafka({
-      clientId: config.kafka.clientId,
-      brokers: config.kafka.brokers,
+  constructor() {
+    const brokers = process.env.KAFKA_BROKERS?.split(',') || ['localhost:9092'];
+    const clientId = process.env.KAFKA_CLIENT_ID || 'communication-service';
+
+    this.kafka = new Kafka({
+      clientId,
+      brokers,
       retry: {
+        retries: 5,
         initialRetryTime: 100,
-        retries: 8,
-      },
+        maxRetryTime: 30000
+      }
     });
 
-    producer = kafka.producer({
+    this.producer = this.kafka.producer({
       allowAutoTopicCreation: false,
-      transactionTimeout: 30000,
+      transactionTimeout: 30000
     });
-
-    await producer.connect();
-
-    logger.info('Kafka producer connected successfully', {
-      clientId: config.kafka.clientId,
-      brokers: config.kafka.brokers,
-    });
-
-    // Handle producer errors
-    producer.on('producer.disconnect', () => {
-      logger.warn('Kafka producer disconnected');
-    });
-
-  } catch (error) {
-    logger.error('Failed to initialize Kafka producer', { error });
-    // Don't throw - allow service to start without Kafka for development
-    logger.warn('Service running without Kafka producer');
-  }
-};
-
-/**
- * Publish message to Kafka topic
- */
-export const publishEvent = async (
-  topic: string,
-  key: string,
-  value: any
-): Promise<void> => {
-  if (!producer) {
-    logger.warn('Kafka producer not initialized, skipping event', { topic, key });
-    return;
   }
 
-  try {
-    const message: ProducerRecord = {
-      topic,
-      messages: [
-        {
-          key,
-          value: JSON.stringify(value),
-          timestamp: Date.now().toString(),
-        },
-      ],
-    };
+  async connect(): Promise<void> {
+    if (this.isConnected || !this.producer) {
+      logger.info('Kafka: Already connected or producer not initialized');
+      return;
+    }
 
-    await producer.send(message);
-
-    logger.debug('Event published to Kafka', {
-      topic,
-      key,
-      eventType: value.eventType,
-    });
-
-  } catch (error) {
-    logger.error('Failed to publish event to Kafka', {
-      topic,
-      key,
-      error,
-    });
-    // Don't throw - message is already saved to MongoDB
-  }
-};
-
-/**
- * Publish MessageSent event
- */
-export const publishMessageSentEvent = async (message: any): Promise<void> => {
-  await publishEvent('communication-events', message.emergencyId, {
-    eventType: 'MessageSent',
-    emergencyId: message.emergencyId,
-    messageId: message._id.toString(),
-    senderId: message.senderId,
-    senderRole: message.senderRole,
-    type: message.type,
-    content: message.content.substring(0, 100), // Truncate for event
-    timestamp: new Date().toISOString(),
-  });
-};
-
-/**
- * Publish MessageDelivered event
- */
-export const publishMessageDeliveredEvent = async (
-  messageId: string,
-  emergencyId: string,
-  userId: string
-): Promise<void> => {
-  await publishEvent('communication-events', emergencyId, {
-    eventType: 'MessageDelivered',
-    emergencyId,
-    messageId,
-    userId,
-    timestamp: new Date().toISOString(),
-  });
-};
-
-/**
- * Publish MessageRead event
- */
-export const publishMessageReadEvent = async (
-  messageId: string,
-  emergencyId: string,
-  userId: string
-): Promise<void> => {
-  await publishEvent('communication-events', emergencyId, {
-    eventType: 'MessageRead',
-    emergencyId,
-    messageId,
-    userId,
-    timestamp: new Date().toISOString(),
-  });
-};
-
-/**
- * Disconnect Kafka producer
- */
-export const disconnectKafkaProducer = async (): Promise<void> => {
-  if (producer) {
     try {
-      await producer.disconnect();
-      logger.info('Kafka producer disconnected');
+      await this.producer.connect();
+      this.isConnected = true;
+      logger.info('Kafka producer connected successfully');
     } catch (error) {
-      logger.error('Error disconnecting Kafka producer', { error });
+      logger.error('Failed to connect Kafka producer:', error);
+      throw error;
     }
   }
-};
 
-export default {
-  initializeKafkaProducer,
-  publishEvent,
-  publishMessageSentEvent,
-  publishMessageDeliveredEvent,
-  publishMessageReadEvent,
-  disconnectKafkaProducer,
-};
+  async disconnect(): Promise<void> {
+    if (!this.isConnected || !this.producer) {
+      return;
+    }
+
+    try {
+      await this.producer.disconnect();
+      this.isConnected = false;
+      logger.info('Kafka producer disconnected successfully');
+    } catch (error) {
+      logger.error('Error disconnecting Kafka producer:', error);
+      throw error;
+    }
+  }
+
+  async publishEvent(topic: string, event: any): Promise<void> {
+    if (!this.isConnected || !this.producer) {
+      logger.warn('Kafka producer not connected, skipping event publish');
+      return;
+    }
+
+    try {
+      const record: ProducerRecord = {
+        topic,
+        messages: [
+          {
+            key: event.emergencyId || event.messageId || Date.now().toString(),
+            value: JSON.stringify(event),
+            timestamp: Date.now().toString()
+          }
+        ]
+      };
+
+      await this.producer.send(record);
+      logger.info(`Event published to Kafka topic ${topic}:`, event.eventType);
+    } catch (error) {
+      logger.error('Error publishing event to Kafka:', error);
+      // Don't throw - we don't want to fail message sending if Kafka is down
+    }
+  }
+
+  async publishMessageSentEvent(event: {
+    emergencyId: string;
+    messageId: string;
+    senderId: string;
+    messageType: string;
+  }): Promise<void> {
+    const kafkaEvent = {
+      eventType: 'MessageSent',
+      ...event,
+      timestamp: new Date()
+    };
+
+    await this.publishEvent('communication.message.sent', kafkaEvent);
+  }
+
+  async publishMessageDeliveredEvent(event: {
+    emergencyId: string;
+    messageId: string;
+    userId: string;
+  }): Promise<void> {
+    const kafkaEvent = {
+      eventType: 'MessageDelivered',
+      ...event,
+      timestamp: new Date()
+    };
+
+    await this.publishEvent('communication.message.delivered', kafkaEvent);
+  }
+
+  async publishMessageReadEvent(event: {
+    emergencyId: string;
+    messageId: string;
+    userId: string;
+  }): Promise<void> {
+    const kafkaEvent = {
+      eventType: 'MessageRead',
+      ...event,
+      timestamp: new Date()
+    };
+
+    await this.publishEvent('communication.message.read', kafkaEvent);
+  }
+
+  isConnectedStatus(): boolean {
+    return this.isConnected;
+  }
+}
+
+export default new KafkaService();

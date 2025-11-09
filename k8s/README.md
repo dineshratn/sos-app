@@ -1,154 +1,98 @@
-# Kubernetes Deployment Files
+# SOS App - Kubernetes Deployment
 
-This directory contains Kubernetes manifests for deploying the SOS App.
+This directory contains Kubernetes manifests for deploying the SOS App to a Kubernetes cluster.
 
-## Directory Structure
+## 📁 Directory Structure
 
 ```
 k8s/
-├── base/                           # Base Kubernetes resources
-│   ├── namespace.yaml             # Namespace definition
-│   ├── configmap.yaml             # Environment configuration
-│   ├── secrets.yaml               # Secrets (CHANGE IN PRODUCTION!)
-│   ├── postgres-pvc.yaml          # PostgreSQL persistent volume claim
-│   ├── redis-pvc.yaml             # Redis persistent volume claim
-│   ├── postgres-deployment.yaml   # PostgreSQL deployment & service
-│   ├── redis-deployment.yaml      # Redis deployment & service
-│   ├── auth-service-deployment.yaml    # Auth service deployment & service
-│   ├── user-service-deployment.yaml    # User service deployment & service
-│   ├── medical-service-deployment.yaml # Medical service deployment & service
-│   └── kustomization.yaml         # Kustomize configuration
-├── overlays/                      # Environment-specific overlays (future)
-│   ├── dev/                       # Development environment
-│   └── prod/                      # Production environment
-└── README.md                      # This file
+├── 00-namespace/          # Namespace definition
+├── 01-secrets/            # Secrets (JWT, database credentials, OAuth)
+├── 02-configmaps/         # Configuration maps (service URLs, database hosts)
+├── 03-databases/          # Database StatefulSets (PostgreSQL, MongoDB, Redis, Kafka)
+├── 04-backend/            # Backend service Deployments
+├── 05-ingress/            # Ingress configuration
+└── README.md              # This file
 ```
 
-## Quick Deployment
+## 🚀 Quick Start
 
-### Using the Deployment Script (Recommended)
+### Prerequisites
+
+- Kubernetes cluster (v1.24+)
+- kubectl installed and configured
+- NGINX Ingress Controller installed
+- At least 8GB RAM and 4 CPU cores available
+
+### Deploy All Services
 
 ```bash
-# From the project root
-./deploy-minikube.sh
+# Make deployment script executable
+chmod +x k8s-deploy.sh
+
+# Run deployment
+./k8s-deploy.sh
 ```
 
-This script will:
-1. Check if Minikube is running
-2. Build Docker images in Minikube's Docker environment
-3. Deploy all Kubernetes resources
-4. Wait for services to be ready
-5. Display access information
+### Access the Application
 
-### Manual Deployment
+Add the following to your `/etc/hosts` file:
 
-```bash
-# Apply all resources at once
-kubectl apply -k k8s/base/
-
-# Or apply individually
-kubectl apply -f k8s/base/namespace.yaml
-kubectl apply -f k8s/base/configmap.yaml
-kubectl apply -f k8s/base/secrets.yaml
-kubectl apply -f k8s/base/postgres-pvc.yaml
-kubectl apply -f k8s/base/redis-pvc.yaml
-kubectl apply -f k8s/base/postgres-deployment.yaml
-kubectl apply -f k8s/base/redis-deployment.yaml
-kubectl apply -f k8s/base/auth-service-deployment.yaml
-kubectl apply -f k8s/base/user-service-deployment.yaml
-kubectl apply -f k8s/base/medical-service-deployment.yaml
+```
+127.0.0.1 sos-app.local
 ```
 
-## Resources Overview
+Then access:
+- API Gateway: http://sos-app.local
+- Health Check: http://sos-app.local/health
 
-### Namespace
-- **Name**: `sos-app`
-- All resources are deployed in this namespace
+## 📦 Components
 
-### ConfigMap
-- **Name**: `sos-app-config`
-- Contains non-sensitive configuration (service URLs, database names, ports)
+### Databases (StatefulSets)
+
+| Component | Replicas | Port | Storage |
+|-----------|----------|------|---------|
+| PostgreSQL (Auth) | 1 | 5432 | 5Gi |
+| PostgreSQL (User) | 1 | 5432 | 5Gi |
+| MongoDB | 1 | 27017 | 10Gi |
+| Redis | 1 | 6379 | 1Gi |
+| Zookeeper | 1 | 2181 | 2Gi |
+| Kafka | 1 | 9092 | 10Gi |
+
+### Backend Services (Deployments)
+
+| Service | Replicas | Port | Resources |
+|---------|----------|------|-----------|
+| API Gateway | 3 | 3000 | 256Mi RAM, 250m CPU |
+| Auth Service | 2 | 3001 | 256Mi RAM, 250m CPU |
+| User Service | 2 | 3002 | 256Mi RAM, 250m CPU |
+| Emergency Service | 2 | 3003 | 256Mi RAM, 250m CPU |
+| Location Service | 2 | 3004 | 256Mi RAM, 250m CPU |
+| Notification Service | 2 | 3005 | 256Mi RAM, 250m CPU |
+| Communication Service | 2 | 3006 | 256Mi RAM, 250m CPU |
+
+## 🔧 Configuration
 
 ### Secrets
-- **Name**: `sos-app-secrets`
-- Contains sensitive data (passwords, JWT secrets, encryption keys)
-- **⚠️ IMPORTANT**: Change all secrets in production!
 
-### Persistent Volumes
-- **postgres-pvc**: 5Gi for PostgreSQL data
-- **redis-pvc**: 1Gi for Redis data
-- **StorageClass**: `standard` (Minikube default)
+Edit `k8s/01-secrets/secrets.yaml` to update:
+- JWT secrets (production)
+- Database passwords
+- OAuth credentials (Google, Apple)
+- External service API keys (Twilio, SendGrid, FCM)
 
-### Databases
+### ConfigMaps
 
-#### PostgreSQL
-- **Image**: `postgres:15-alpine`
-- **Port**: 5432 (ClusterIP)
-- **Replicas**: 1
-- **Databases**: `sos_auth`, `sos_user`, `sos_medical`
-- **Extensions**: `uuid-ossp`, `pgcrypto`
-- **Init Script**: Automatically creates databases and extensions
+Edit `k8s/02-configmaps/configmaps.yaml` to update:
+- Service URLs
+- Database hosts
+- Environment variables
 
-#### Redis
-- **Image**: `redis:7-alpine`
-- **Port**: 6379 (ClusterIP)
-- **Replicas**: 1
-- **Persistence**: AOF enabled
+### Resource Limits
 
-### Microservices
+Adjust resource requests/limits in each service's YAML file under `04-backend/`.
 
-All services use:
-- **imagePullPolicy**: `Never` (uses local Minikube images)
-- **Type**: NodePort (for external access)
-- **Init Containers**: Wait for dependencies to be ready
-- **Health Checks**: Liveness and readiness probes
-- **Resource Limits**: CPU and memory limits defined
-
-#### Auth Service
-- **Image**: `sos-app/auth-service:latest`
-- **Port**: 3001
-- **NodePort**: 30001
-- **Dependencies**: PostgreSQL, Redis
-
-#### User Service
-- **Image**: `sos-app/user-service:latest`
-- **Port**: 3002
-- **NodePort**: 30002
-- **Dependencies**: PostgreSQL, Auth Service
-
-#### Medical Service
-- **Image**: `sos-app/medical-service:latest`
-- **Port**: 3003
-- **NodePort**: 30003
-- **Dependencies**: PostgreSQL, Auth Service
-
-## Accessing Services
-
-### Get Minikube IP
-
-```bash
-minikube ip
-# Example: 192.168.49.2
-```
-
-### Service URLs
-
-Replace `<MINIKUBE_IP>` with your Minikube IP:
-
-- Auth Service: `http://<MINIKUBE_IP>:30001`
-- User Service: `http://<MINIKUBE_IP>:30002`
-- Medical Service: `http://<MINIKUBE_IP>:30003`
-
-### Health Checks
-
-```bash
-MINIKUBE_IP=$(minikube ip)
-curl http://${MINIKUBE_IP}:30001/health
-curl http://${MINIKUBE_IP}:30002/health
-curl http://${MINIKUBE_IP}:30003/health
-```
-
-## Monitoring
+## 📊 Monitoring
 
 ### View All Resources
 
@@ -156,152 +100,296 @@ curl http://${MINIKUBE_IP}:30003/health
 kubectl get all -n sos-app
 ```
 
-### View Logs
+### View Pods
 
 ```bash
-# Auth Service
-kubectl logs -f -l app=auth-service -n sos-app
-
-# User Service
-kubectl logs -f -l app=user-service -n sos-app
-
-# Medical Service
-kubectl logs -f -l app=medical-service -n sos-app
-
-# PostgreSQL
-kubectl logs -f -l app=postgres -n sos-app
-
-# Redis
-kubectl logs -f -l app=redis -n sos-app
+kubectl get pods -n sos-app
 ```
 
-### View Events
+### View Services
+
+```bash
+kubectl get svc -n sos-app
+```
+
+### View StatefulSets
+
+```bash
+kubectl get statefulset -n sos-app
+```
+
+### Check Ingress
+
+```bash
+kubectl get ingress -n sos-app
+```
+
+## 🔍 Debugging
+
+### View Pod Logs
+
+```bash
+# Real-time logs
+kubectl logs -f <pod-name> -n sos-app
+
+# Last 100 lines
+kubectl logs --tail=100 <pod-name> -n sos-app
+```
+
+### Describe Pod
+
+```bash
+kubectl describe pod <pod-name> -n sos-app
+```
+
+### Execute Commands in Pod
+
+```bash
+kubectl exec -it <pod-name> -n sos-app -- /bin/sh
+```
+
+### Port Forward to Service
+
+```bash
+# Forward local port to service
+kubectl port-forward svc/api-gateway 3000:3000 -n sos-app
+```
+
+### Check Events
 
 ```bash
 kubectl get events -n sos-app --sort-by='.lastTimestamp'
 ```
 
-### Resource Usage
+## 🔄 Scaling
+
+### Scale Deployments
 
 ```bash
-kubectl top nodes
-kubectl top pods -n sos-app
+# Scale API Gateway
+kubectl scale deployment api-gateway -n sos-app --replicas=5
+
+# Scale all services
+kubectl scale deployment --all -n sos-app --replicas=3
 ```
 
-## Cleanup
+### Auto-scaling (HPA)
+
+```bash
+# Enable horizontal pod autoscaling
+kubectl autoscale deployment api-gateway \
+  --cpu-percent=50 \
+  --min=3 \
+  --max=10 \
+  -n sos-app
+```
+
+## 🔐 Security
+
+### Update Secrets
+
+```bash
+# Update JWT secret
+kubectl create secret generic jwt-secrets \
+  -n sos-app \
+  --from-literal=jwt-secret='your-new-secret' \
+  --from-literal=jwt-refresh-secret='your-new-refresh-secret' \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart deployments to use new secrets
+kubectl rollout restart deployment -n sos-app
+```
+
+### Network Policies
+
+Create network policies to restrict traffic between services:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-policy
+  namespace: sos-app
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nginx-ingress
+```
+
+## 🔄 Updates and Rollouts
+
+### Update Service Image
+
+```bash
+# Set new image
+kubectl set image deployment/auth-service \
+  auth-service=sos-app/auth-service:v2.0 \
+  -n sos-app
+
+# Check rollout status
+kubectl rollout status deployment/auth-service -n sos-app
+```
+
+### Rollback
+
+```bash
+# Undo last deployment
+kubectl rollout undo deployment/auth-service -n sos-app
+
+# Rollback to specific revision
+kubectl rollout undo deployment/auth-service --to-revision=2 -n sos-app
+```
+
+### View Rollout History
+
+```bash
+kubectl rollout history deployment/auth-service -n sos-app
+```
+
+## 🧹 Cleanup
 
 ### Delete All Resources
 
 ```bash
-# Delete entire namespace (removes everything)
+# Make cleanup script executable
+chmod +x k8s-undeploy.sh
+
+# Run cleanup
+./k8s-undeploy.sh
+```
+
+Or manually:
+
+```bash
 kubectl delete namespace sos-app
-
-# Or delete using kustomize
-kubectl delete -k k8s/base/
 ```
 
-### Stop Minikube
+## 🎯 Health Checks
 
-```bash
-# Stop Minikube (preserves cluster)
-minikube stop
+### Liveness Probes
+- Check if container is alive
+- Restart container if fails
+- Path: `/health`
 
-# Delete Minikube cluster completely
-minikube delete
+### Readiness Probes
+- Check if service is ready to accept traffic
+- Remove from service endpoints if fails
+- Path: `/health` or `/health/ready`
+
+### Startup Probes
+- Check if application has started
+- Other probes disabled until succeeds
+- Path: `/health`
+
+## 📈 Performance Tuning
+
+### Database Optimization
+
+```yaml
+# PostgreSQL
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
 ```
 
-## Troubleshooting
+### API Gateway Tuning
 
-### Pods Not Starting
+```yaml
+# Increase replicas for high traffic
+replicas: 5
 
-Check pod status and logs:
+# Adjust circuit breaker settings
+env:
+  - name: CIRCUIT_BREAKER_THRESHOLD
+    value: "10"
+  - name: CIRCUIT_BREAKER_TIMEOUT
+    value: "30000"
+```
+
+## 🌍 Multi-Environment Setup
+
+### Development
+
 ```bash
-kubectl get pods -n sos-app
+kubectl apply -k k8s/overlays/development
+```
+
+### Staging
+
+```bash
+kubectl apply -k k8s/overlays/staging
+```
+
+### Production
+
+```bash
+kubectl apply -k k8s/overlays/production
+```
+
+## 📝 Troubleshooting
+
+### Pod Stuck in Pending
+
+```bash
+# Check events
 kubectl describe pod <pod-name> -n sos-app
-kubectl logs <pod-name> -n sos-app
+
+# Common issues:
+# - Insufficient resources
+# - PVC not bound
+# - Node selector mismatch
 ```
 
-### Image Not Found
+### Pod CrashLoopBackOff
 
-Make sure you're using Minikube's Docker daemon:
 ```bash
-eval $(minikube docker-env)
-docker images | grep sos-app
-```
+# Check logs
+kubectl logs <pod-name> -n sos-app --previous
 
-If images are missing, rebuild them:
-```bash
-docker build -t sos-app/auth-service:latest ./services/auth-service
-docker build -t sos-app/user-service:latest ./services/user-service
-docker build -t sos-app/medical-service:latest ./services/medical-service
-```
-
-### Database Connection Issues
-
-Check if databases are ready:
-```bash
-kubectl get pods -n sos-app | grep postgres
-kubectl get pods -n sos-app | grep redis
-```
-
-Wait for them to be Running:
-```bash
-kubectl wait --for=condition=ready pod -l app=postgres -n sos-app --timeout=120s
-kubectl wait --for=condition=ready pod -l app=redis -n sos-app --timeout=120s
+# Common issues:
+# - Application error
+# - Missing environment variables
+# - Database connection failure
 ```
 
 ### Service Not Accessible
 
-Verify NodePort services:
 ```bash
-kubectl get svc -n sos-app
+# Check service endpoints
+kubectl get endpoints -n sos-app
+
+# Check ingress
+kubectl describe ingress sos-app-ingress -n sos-app
+
+# Test from within cluster
+kubectl run -it --rm debug \
+  --image=curlimages/curl \
+  --restart=Never \
+  -n sos-app \
+  -- curl http://api-gateway:3000/health
 ```
 
-Check Minikube IP:
-```bash
-minikube ip
-```
+## 📚 Additional Resources
 
-Try port forwarding as alternative:
-```bash
-kubectl port-forward svc/auth-service 3001:3001 -n sos-app
-# Then access http://localhost:3001
-```
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
+- [PostgreSQL on Kubernetes](https://www.postgresql.org/docs/)
+- [MongoDB on Kubernetes](https://docs.mongodb.com/kubernetes-operator/)
+- [Redis on Kubernetes](https://redis.io/topics/kubernetes)
 
-## Production Considerations
+## 🤝 Support
 
-When deploying to production Kubernetes:
-
-1. **Change all secrets** in `secrets.yaml`
-2. **Use proper storage classes** instead of `standard`
-3. **Implement Ingress** for better routing
-4. **Add TLS certificates** for HTTPS
-5. **Increase replicas** for high availability
-6. **Configure HPA** (Horizontal Pod Autoscaler)
-7. **Set resource limits** appropriately
-8. **Use managed databases** (RDS, Cloud SQL, etc.)
-9. **Implement proper monitoring** (Prometheus, Grafana)
-10. **Use proper secrets management** (Vault, Sealed Secrets)
-11. **Change imagePullPolicy** to `IfNotPresent` or `Always`
-12. **Use image tags** instead of `latest`
-
-## Using Kustomize
-
-To customize for different environments:
-
-```bash
-# Apply with Kustomize
-kubectl apply -k k8s/base/
-
-# View generated YAML
-kubectl kustomize k8s/base/
-
-# Create overlays for different environments
-# Then apply: kubectl apply -k k8s/overlays/prod/
-```
-
-## Further Reading
-
-- [Minikube Guide](../MINIKUBE_GUIDE.md) - Complete WSL2 + Minikube setup
-- [Kubernetes Documentation](https://kubernetes.io/docs/home/)
-- [Kustomize Documentation](https://kustomize.io/)
+For issues or questions:
+1. Check pod logs
+2. Review events
+3. Consult the troubleshooting section
+4. Open an issue in the project repository

@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
-	"github.com/sos-app/emergency-service/internal/handlers"
 	"github.com/sos-app/emergency-service/internal/models"
 )
 
@@ -129,9 +127,9 @@ func (m *MockKafkaProducer) PublishEmergencyCancelled(ctx context.Context, emerg
 
 func TestTriggerEmergency(t *testing.T) {
 	// Setup
-	emergencyRepo := NewMockEmergencyRepository()
-	ackRepo := NewMockAcknowledgmentRepository()
-	producer := &MockKafkaProducer{}
+	_ = NewMockEmergencyRepository()
+	_ = NewMockAcknowledgmentRepository()
+	_ = &MockKafkaProducer{}
 
 	// Note: In real tests, we'd inject countdown and escalation services
 	// For now, we test the handler logic independently
@@ -152,8 +150,8 @@ func TestTriggerEmergency(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/emergency/trigger", bytes.NewBuffer(body))
-	w := httptest.NewRecorder()
+	_ = httptest.NewRequest(http.MethodPost, "/api/v1/emergency/trigger", bytes.NewBuffer(body))
+	_ = httptest.NewRecorder()
 
 	// Note: Full handler testing would require initializing the complete handler
 	// This is a simplified test to demonstrate the test structure

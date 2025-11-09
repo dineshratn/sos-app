@@ -1,213 +1,218 @@
-import Message from '../../models/Message';
-import logger from '../../utils/logger';
-
 /**
- * Initialize message collection with proper indexes and configuration
- * This ensures the collection is created with all necessary indexes for optimal performance
+ * MongoDB Schema for Messages
+ * Task 125: Mongoose schema with TTL index for 90-day auto-deletion
  */
-export const initializeMessageCollection = async (): Promise<void> => {
-  try {
-    // Get the collection
-    const collection = Message.collection;
 
-    // Check if collection exists
-    const collections = await Message.db.listCollections({ name: 'messages' }).toArray();
+import mongoose, { Schema, Document } from 'mongoose';
+import {
+  Message,
+  MessageType,
+  MessageStatus,
+  SenderRole,
+  QuickResponseType
+} from '../../models/Message';
 
-    if (collections.length === 0) {
-      logger.info('Creating messages collection...');
-      await Message.createCollection();
-    }
+export interface MessageDocument extends Omit<Message, 'id'>, Document {
+  _id: mongoose.Types.ObjectId;
+}
 
-    // Ensure all indexes are created
-    logger.info('Creating indexes for messages collection...');
+const MessageMetadataSchema = new Schema(
+  {
+    // Media metadata
+    mediaUrl: { type: String },
+    mediaType: { type: String },
+    mediaSize: { type: Number },
+    mediaDuration: { type: Number },
+    thumbnailUrl: { type: String },
 
-    // Single field indexes
-    await collection.createIndex({ emergencyId: 1 }, { background: true });
-    await collection.createIndex({ senderId: 1 }, { background: true });
-    await collection.createIndex({ delivered: 1 }, { background: true });
-    await collection.createIndex({ read: 1 }, { background: true });
-    await collection.createIndex({ deletedAt: 1 }, { background: true });
+    // Location metadata
+    latitude: { type: Number },
+    longitude: { type: Number },
+    accuracy: { type: Number },
+    address: { type: String },
 
-    // Compound indexes for efficient queries
-    await collection.createIndex(
-      { emergencyId: 1, createdAt: -1 },
-      { background: true, name: 'emergency_created_idx' }
-    );
+    // Voice transcription
+    transcription: { type: String },
+    transcriptionConfidence: { type: Number },
 
-    await collection.createIndex(
-      { emergencyId: 1, delivered: 1 },
-      { background: true, name: 'emergency_delivered_idx' }
-    );
-
-    await collection.createIndex(
-      { emergencyId: 1, read: 1 },
-      { background: true, name: 'emergency_read_idx' }
-    );
-
-    // TTL index to automatically delete messages after 90 days
-    await collection.createIndex(
-      { createdAt: 1 },
-      {
-        expireAfterSeconds: 90 * 24 * 60 * 60, // 90 days in seconds
-        background: true,
-        name: 'message_ttl_idx',
-      }
-    );
-
-    logger.info('Message collection indexes created successfully');
-
-    // Log current indexes
-    const indexes = await collection.indexes();
-    logger.info('Current message collection indexes', {
-      count: indexes.length,
-      indexes: indexes.map(idx => ({ name: idx.name, keys: idx.key }))
-    });
-
-  } catch (error) {
-    logger.error('Failed to initialize message collection', { error });
-    throw error;
-  }
-};
-
-/**
- * Collection schema validation rules
- * MongoDB schema validation for data integrity
- */
-export const messageSchemaValidation = {
-  $jsonSchema: {
-    bsonType: 'object',
-    required: ['emergencyId', 'senderId', 'senderName', 'senderRole', 'type', 'content'],
-    properties: {
-      emergencyId: {
-        bsonType: 'string',
-        description: 'Emergency ID - required string',
-      },
-      senderId: {
-        bsonType: 'string',
-        description: 'Sender user ID - required string',
-      },
-      senderName: {
-        bsonType: 'string',
-        description: 'Sender display name - required string',
-      },
-      senderRole: {
-        enum: ['USER', 'CONTACT', 'RESPONDER'],
-        description: 'Role of the message sender',
-      },
-      type: {
-        enum: ['TEXT', 'VOICE', 'IMAGE', 'VIDEO', 'LOCATION', 'QUICK_RESPONSE'],
-        description: 'Type of message',
-      },
-      content: {
-        bsonType: 'string',
-        maxLength: 5000,
-        description: 'Message content - max 5000 characters',
-      },
-      metadata: {
-        bsonType: 'object',
-        description: 'Additional message metadata',
-        properties: {
-          mediaUrl: { bsonType: 'string' },
-          thumbnailUrl: { bsonType: 'string' },
-          transcription: { bsonType: 'string' },
-          duration: { bsonType: 'number' },
-          fileSize: { bsonType: 'number' },
-          mimeType: { bsonType: 'string' },
-          location: {
-            bsonType: 'object',
-            properties: {
-              latitude: { bsonType: 'double' },
-              longitude: { bsonType: 'double' },
-              accuracy: { bsonType: 'double' },
-            },
-          },
-          quickResponseType: {
-            enum: [
-              'NEED_AMBULANCE',
-              'NEED_POLICE',
-              'NEED_FIRE',
-              'TRAPPED',
-              'INJURED',
-              'SAFE_NOW',
-              'CALL_ME',
-            ],
-          },
-        },
-      },
-      delivered: {
-        bsonType: 'bool',
-        description: 'Whether message has been delivered',
-      },
-      read: {
-        bsonType: 'bool',
-        description: 'Whether message has been read',
-      },
-      deliveredAt: {
-        bsonType: 'date',
-        description: 'Timestamp when message was delivered',
-      },
-      readAt: {
-        bsonType: 'date',
-        description: 'Timestamp when message was read',
-      },
-      createdAt: {
-        bsonType: 'date',
-        description: 'Message creation timestamp',
-      },
-      updatedAt: {
-        bsonType: 'date',
-        description: 'Message update timestamp',
-      },
-      deletedAt: {
-        bsonType: 'date',
-        description: 'Soft delete timestamp',
-      },
+    // Quick response
+    quickResponseType: {
+      type: String,
+      enum: Object.values(QuickResponseType)
     },
+
+    // System message
+    systemMessageType: { type: String },
+    systemMessageData: { type: Schema.Types.Mixed },
+
+    // General
+    fileName: { type: String },
+    originalName: { type: String },
+    isEdited: { type: Boolean, default: false },
+    editedAt: { type: Date },
+    replyToMessageId: { type: String }
   },
-};
+  { _id: false }
+);
 
-/**
- * Apply schema validation to existing collection
- */
-export const applyMessageSchemaValidation = async (): Promise<void> => {
-  try {
-    await Message.db.command({
-      collMod: 'messages',
-      validator: messageSchemaValidation,
-      validationLevel: 'moderate', // Only validate inserts and updates
-      validationAction: 'error', // Reject documents that don't match schema
-    });
-
-    logger.info('Message schema validation applied successfully');
-  } catch (error) {
-    logger.error('Failed to apply message schema validation', { error });
-    // Don't throw - validation is optional, indexes are more critical
+const MessageSchema = new Schema<MessageDocument>(
+  {
+    emergencyId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    senderId: {
+      type: String,
+      required: true,
+      index: true
+    },
+    senderRole: {
+      type: String,
+      enum: Object.values(SenderRole),
+      required: true,
+      default: SenderRole.USER
+    },
+    type: {
+      type: String,
+      enum: Object.values(MessageType),
+      required: true,
+      default: MessageType.TEXT
+    },
+    content: {
+      type: String,
+      required: true,
+      maxlength: 10000
+    },
+    metadata: {
+      type: MessageMetadataSchema,
+      default: {}
+    },
+    status: {
+      type: String,
+      enum: Object.values(MessageStatus),
+      default: MessageStatus.SENT
+    },
+    deliveredTo: [{
+      type: String
+    }],
+    readBy: [{
+      type: String
+    }],
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      index: true
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  },
+  {
+    timestamps: true,
+    collection: 'messages'
   }
-};
+);
 
-/**
- * Get collection statistics
- */
-export const getMessageCollectionStats = async (): Promise<any> => {
-  try {
-    const stats = await Message.db.command({ collStats: 'messages' });
-    return {
-      count: stats.count,
-      size: stats.size,
-      avgObjSize: stats.avgObjSize,
-      storageSize: stats.storageSize,
-      indexes: stats.nindexes,
-      totalIndexSize: stats.totalIndexSize,
-    };
-  } catch (error) {
-    logger.error('Failed to get message collection stats', { error });
-    return null;
+// Compound indexes for efficient queries
+MessageSchema.index({ emergencyId: 1, createdAt: -1 });
+MessageSchema.index({ emergencyId: 1, senderId: 1 });
+MessageSchema.index({ emergencyId: 1, type: 1 });
+
+// TTL index for 90-day auto-deletion (90 days = 7776000 seconds)
+MessageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 });
+
+// Virtual for id (to map _id to id in responses)
+MessageSchema.virtual('id').get(function (this: MessageDocument) {
+  return this._id.toHexString();
+});
+
+// Ensure virtuals are included in JSON
+MessageSchema.set('toJSON', {
+  virtuals: true,
+  versionKey: false,
+  transform: function (_doc, ret) {
+    ret.id = ret._id.toHexString();
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete ret._id;
+    return ret;
   }
+});
+
+// Pre-save middleware to update timestamps
+MessageSchema.pre('save', function (next) {
+  if (this.isModified() && !this.isNew) {
+    this.updatedAt = new Date();
+  }
+  next();
+});
+
+// Static methods
+MessageSchema.statics.findByEmergency = function (
+  emergencyId: string,
+  limit: number = 50,
+  offset: number = 0
+) {
+  return this.find({ emergencyId })
+    .sort({ createdAt: -1 })
+    .skip(offset)
+    .limit(limit)
+    .lean();
 };
 
-export default {
-  initializeMessageCollection,
-  applyMessageSchemaValidation,
-  messageSchemaValidation,
-  getMessageCollectionStats,
+MessageSchema.statics.findByEmergencyWithPagination = function (
+  emergencyId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    before?: Date;
+    after?: Date;
+  } = {}
+) {
+  const query: any = { emergencyId };
+
+  if (options.before) {
+    query.createdAt = { ...query.createdAt, $lt: options.before };
+  }
+  if (options.after) {
+    query.createdAt = { ...query.createdAt, $gt: options.after };
+  }
+
+  return this.find(query)
+    .sort({ createdAt: -1 })
+    .skip(options.offset || 0)
+    .limit(options.limit || 50)
+    .lean();
 };
+
+MessageSchema.statics.countByEmergency = function (emergencyId: string) {
+  return this.countDocuments({ emergencyId });
+};
+
+MessageSchema.statics.markAsDelivered = function (messageId: string, userId: string) {
+  return this.findByIdAndUpdate(
+    messageId,
+    {
+      $addToSet: { deliveredTo: userId },
+      $set: { status: MessageStatus.DELIVERED }
+    },
+    { new: true }
+  );
+};
+
+MessageSchema.statics.markAsRead = function (messageId: string, userId: string) {
+  return this.findByIdAndUpdate(
+    messageId,
+    {
+      $addToSet: { readBy: userId },
+      $set: { status: MessageStatus.READ }
+    },
+    { new: true }
+  );
+};
+
+// Create and export model
+const MessageModel = mongoose.model<MessageDocument>('Message', MessageSchema);
+
+export default MessageModel;

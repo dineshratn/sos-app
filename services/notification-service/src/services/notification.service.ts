@@ -145,7 +145,7 @@ export async function dispatchEmergencyAlert(
  */
 export async function dispatchLocationUpdate(
   emergencyId: string,
-  location: { latitude: number; longitude: number; address?: string },
+  _location: { latitude: number; longitude: number; address?: string },
   contacts: EmergencyContact[]
 ): Promise<void> {
   logger.info('Dispatching location update', {

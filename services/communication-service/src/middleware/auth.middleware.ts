@@ -1,134 +1,111 @@
-import { Request, Response, NextFunction } from 'express';
+/**
+ * Authentication Middleware
+ * JWT token validation for Socket.IO connections
+ */
+
 import jwt from 'jsonwebtoken';
-import fs from 'fs';
-import config from '../config';
+import { Socket } from 'socket.io';
 import logger from '../utils/logger';
+
+export interface AuthenticatedSocket extends Socket {
+  userId?: string;
+  userName?: string;
+  userRole?: string;
+}
 
 export interface JWTPayload {
   userId: string;
-  email?: string;
-  username?: string;
-  iat: number;
-  exp: number;
+  email: string;
+  name: string;
+  role?: string;
+  iat?: number;
+  exp?: number;
 }
 
-export interface AuthenticatedRequest extends Request {
-  user?: JWTPayload;
-}
-
-// Load JWT public key for token verification
-let publicKey: string;
-
-try {
-  publicKey = fs.readFileSync(config.jwt.publicKeyPath, 'utf8');
-} catch (error) {
-  logger.warn('JWT public key not found, using fallback for development', { error });
-  // Fallback for development - in production, this should fail
-  publicKey = process.env.JWT_PUBLIC_KEY || '';
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 /**
- * Verify JWT token
+ * Middleware to authenticate Socket.IO connections
  */
-export const verifyToken = (token: string): Promise<JWTPayload> => {
-  return new Promise((resolve, reject) => {
-    jwt.verify(
-      token,
-      publicKey,
-      {
-        algorithms: [config.jwt.algorithm as jwt.Algorithm],
-      },
-      (err, decoded) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(decoded as JWTPayload);
-      }
-    );
-  });
-};
-
-/**
- * Authentication middleware for Express routes
- */
-export const authenticateRequest = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
+export const authenticateSocket = async (
+  socket: AuthenticatedSocket,
+  next: (err?: Error) => void
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    // Get token from handshake auth or query
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.query?.token as string;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Missing or invalid authorization header',
-        },
-      });
-      return;
+    if (!token) {
+      logger.warn(`Authentication failed: No token provided for socket ${socket.id}`);
+      return next(new Error('Authentication error: No token provided'));
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    // Verify token
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
 
-    const payload = await verifyToken(token);
-    req.user = payload;
+    // Attach user info to socket
+    socket.userId = decoded.userId;
+    socket.userName = decoded.name;
+    socket.userRole = decoded.role || 'USER';
 
-    next();
-  } catch (error: any) {
-    logger.error('Authentication failed', {
-      error: error.message,
-      path: req.path,
-    });
-
-    res.status(401).json({
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Invalid or expired token',
-      },
-    });
-  }
-};
-
-/**
- * Verify socket token (used by Socket.IO)
- */
-export const verifySocketToken = async (token: string): Promise<JWTPayload> => {
-  try {
-    return await verifyToken(token);
-  } catch (error: any) {
-    logger.error('Socket token verification failed', { error: error.message });
-    throw new Error('Invalid or expired token');
-  }
-};
-
-/**
- * Optional authentication middleware (doesn't fail if no token)
- */
-export const optionalAuth = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const authHeader = req.headers.authorization;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const payload = await verifyToken(token);
-      req.user = payload;
-    }
-
+    logger.info(`Socket ${socket.id} authenticated as user ${decoded.userId}`);
     next();
   } catch (error) {
-    // Ignore authentication errors in optional auth
-    next();
+    logger.error('Socket authentication error:', error);
+
+    if (error instanceof jwt.JsonWebTokenError) {
+      return next(new Error('Authentication error: Invalid token'));
+    }
+
+    if (error instanceof jwt.TokenExpiredError) {
+      return next(new Error('Authentication error: Token expired'));
+    }
+
+    return next(new Error('Authentication error'));
   }
 };
 
-export default {
-  authenticateRequest,
-  verifySocketToken,
-  optionalAuth,
-  verifyToken,
+/**
+ * Verify user has permission to join emergency room
+ */
+export const authorizeEmergencyAccess = async (
+  userId: string,
+  emergencyId: string,
+  role: string
+): Promise<boolean> => {
+  try {
+    // In production, this would validate against the emergency service
+    // Check if user is:
+    // 1. The user who triggered the emergency
+    // 2. An emergency contact
+    // 3. A first responder with access
+    // 4. An admin
+
+    // For now, allow all authenticated users (placeholder)
+    // TODO: Implement proper authorization check with emergency service
+    logger.info(`Authorizing user ${userId} for emergency ${emergencyId} with role ${role}`);
+
+    // Simulated authorization logic
+    if (role === 'ADMIN') {
+      return true;
+    }
+
+    // In real implementation, call emergency service to verify access
+    // const hasAccess = await emergencyService.checkUserAccess(userId, emergencyId);
+    // return hasAccess;
+
+    return true; // Placeholder - allow all for now
+  } catch (error) {
+    logger.error('Authorization check failed:', error);
+    return false;
+  }
+};
+
+/**
+ * Generate JWT token (utility for testing)
+ */
+export const generateToken = (payload: Omit<JWTPayload, 'iat' | 'exp'>): string => {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
 };
