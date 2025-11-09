@@ -52,6 +52,9 @@ router.get(
       }
 
       const deviceInfo = {
+        deviceId,
+        deviceName,
+        deviceType,
         ipAddress: (req.headers['x-forwarded-for'] as string) || req.ip || 'unknown',
         userAgent: req.headers['user-agent'] || 'unknown',
       };
@@ -109,6 +112,9 @@ router.post(
       }
 
       const deviceInfo = {
+        deviceId,
+        deviceName,
+        deviceType,
         ipAddress: (req.headers['x-forwarded-for'] as string) || req.ip || 'unknown',
         userAgent: req.headers['user-agent'] || 'unknown',
       };

@@ -1,21 +1,16 @@
 import User, { AuthProvider } from '../models/User';
 import Session from '../models/Session';
-import { hashPassword, comparePassword, validatePasswordStrength } from '../utils/password';
-import { generateTokenPair, verifyRefreshToken, getTokenExpiryTime } from '../utils/jwt';
+import { hashPassword, validatePasswordStrength } from '../utils/password';
+import { generateTokenPair } from '../utils/jwt';
 import redisService from './redis.service';
 import logger from '../utils/logger';
 import config from '../config';
 import {
   RegisterRequest,
-  LoginRequest,
-  RefreshTokenRequest,
-  LogoutRequest,
   AuthResponse,
-  LogoutResponse,
   DeviceInfo,
 } from '../types/auth.types';
 import { AppError } from '../middleware/errorHandler';
-import crypto from 'crypto';
 
 class AuthService {
   /**

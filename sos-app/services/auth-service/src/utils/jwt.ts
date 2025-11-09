@@ -41,11 +41,15 @@ export const generateAccessToken = (
     type: 'access',
   };
 
-  const token = jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.accessTokenExpiry,
-    issuer: config.serviceName,
-    audience: 'sos-app',
-  });
+  const token = jwt.sign(
+    payload as jwt.JwtPayload,
+    config.jwt.secret as string,
+    {
+      expiresIn: config.jwt.accessTokenExpiry,
+      issuer: config.serviceName,
+      audience: 'sos-app',
+    }
+  );
 
   return token;
 };
@@ -69,12 +73,16 @@ export const generateRefreshToken = (
     type: 'refresh',
   };
 
-  const token = jwt.sign(payload, config.jwt.refreshSecret, {
-    expiresIn: config.jwt.refreshTokenExpiry,
-    issuer: config.serviceName,
-    audience: 'sos-app',
-    jwtid: uuidv4(), // Unique token ID for tracking
-  });
+  const token = jwt.sign(
+    payload as jwt.JwtPayload,
+    config.jwt.refreshSecret as string,
+    {
+      expiresIn: config.jwt.refreshTokenExpiry,
+      issuer: config.serviceName,
+      audience: 'sos-app',
+      jwtid: uuidv4(), // Unique token ID for tracking
+    }
+  );
 
   return token;
 };

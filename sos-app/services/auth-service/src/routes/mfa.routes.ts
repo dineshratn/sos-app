@@ -62,7 +62,6 @@ router.post(
 );
 
 /**
-<<<<<<< HEAD
  * @route   POST /api/v1/auth/mfa/challenge
  * @desc    Verify TOTP code during login (MFA challenge)
  * @access  Public (but requires userId in request body from login flow)
@@ -82,7 +81,7 @@ router.post(
         return;
       }
 
-      const isValid = await mfaService.verifyMFAToken(userId, token);
+      const isValid = await mfaService.verifyMFALogin(userId, token);
 
       if (!isValid) {
         logger.warn(`Invalid MFA token for user: ${userId}`);

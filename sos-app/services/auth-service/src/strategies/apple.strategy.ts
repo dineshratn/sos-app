@@ -51,7 +51,7 @@ export const configureAppleStrategy = (): void => {
         scope: ['name', 'email'],
         passReqToCallback: true,
       },
-      async (req: any, accessToken: string, refreshToken: string, idToken: any, profile: any, done: any) => {
+      async (_req: any, _accessToken: string, _refreshToken: string, idToken: any, profile: any, done: any) => {
         try {
           // Apple provides user info only on first login
           // Subsequent logins only provide the user ID
