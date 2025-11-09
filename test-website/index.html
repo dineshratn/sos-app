@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS App - Emergency Response System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">🚨 SOS App</div>
+            <div class="nav-links">
+                <a href="#dashboard" class="nav-link active">Dashboard</a>
+                <a href="#emergencies" class="nav-link">Emergencies</a>
+                <a href="#contacts" class="nav-link">Contacts</a>
+                <a href="#profile" class="nav-link">Profile</a>
+                <a href="#" id="logout-btn" class="nav-link logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Dashboard Page -->
+        <div id="dashboard-page" class="page active">
+            <div class="dashboard-header">
+                <h1>Welcome, <span id="user-name">User</span>!</h1>
+                <p>Emergency Response System</p>
+            </div>
+
+            <!-- SOS Button Section -->
+            <div class="sos-section">
+                <div class="sos-card">
+                    <h2>Emergency Alert</h2>
+                    <p id="emergency-status" class="status-text">No active emergency</p>
+
+                    <div class="sos-button-wrapper">
+                        <button id="sos-btn" class="sos-button" title="Press to trigger emergency alert">
+                            <span class="sos-icon">🚨</span>
+                            <span class="sos-text">EMERGENCY</span>
+                        </button>
+                    </div>
+
+                    <p class="sos-hint">Press and hold for 3 seconds to trigger emergency</p>
+                    <div id="sos-progress" class="sos-progress" style="display: none;">
+                        <div id="sos-progress-bar" class="sos-progress-bar"></div>
+                        <span id="sos-progress-text">0%</span>
+                    </div>
+                </div>
+
+                <!-- Active Emergency Info -->
+                <div id="active-emergency" class="emergency-info" style="display: none;">
+                    <h3>Active Emergency</h3>
+                    <div id="emergency-details"></div>
+                    <div class="emergency-actions">
+                        <button id="cancel-emergency-btn" class="btn btn-danger">Cancel Emergency</button>
+                        <button id="resolve-emergency-btn" class="btn btn-success">Mark as Resolved</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Active Emergencies</h3>
+                    <p class="stat-number" id="stat-active">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Resolved Today</h3>
+                    <p class="stat-number" id="stat-resolved">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Emergency Contacts</h3>
+                    <p class="stat-number" id="stat-contacts">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Response Time</h3>
+                    <p class="stat-number" id="stat-response">--</p>
+                </div>
+            </div>
+
+            <!-- Recent Emergencies -->
+            <div class="recent-section">
+                <h2>Recent Emergencies</h2>
+                <div id="recent-emergencies" class="emergencies-list">
+                    <p class="empty-state">No emergencies yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emergencies Page -->
+        <div id="emergencies-page" class="page">
+            <h1>Emergency History</h1>
+            <div id="emergencies-container" class="emergencies-list">
+                <p class="empty-state">No emergencies to display</p>
+            </div>
+        </div>
+
+        <!-- Contacts Page -->
+        <div id="contacts-page" class="page">
+            <h1>Emergency Contacts</h1>
+            <div class="contacts-header">
+                <button id="add-contact-btn" class="btn btn-primary">+ Add Contact</button>
+            </div>
+            <div id="contacts-container" class="contacts-list">
+                <p class="empty-state">No contacts yet</p>
+            </div>
+
+            <!-- Add Contact Modal -->
+            <div id="add-contact-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Add Emergency Contact</h2>
+                        <button class="modal-close" onclick="closeAddContactModal()">&times;</button>
+                    </div>
+                    <form id="add-contact-form" onsubmit="addContact(event)">
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" id="contact-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Relationship</label>
+                            <input type="text" id="contact-relationship" placeholder="e.g., Doctor, Family">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="contact-phone" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="contact-email">
+                        </div>
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="contact-priority">
+                                <option value="1">Critical</option>
+                                <option value="2">High</option>
+                                <option value="3">Medium</option>
+                                <option value="4">Low</option>
+                            </select>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="closeAddContactModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Add Contact</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div id="profile-page" class="page">
+            <h1>User Profile</h1>
+            <div class="profile-card">
+                <h2 id="profile-name">User Name</h2>
+                <p id="profile-email">user@email.com</p>
+                <button id="edit-profile-btn" class="btn btn-primary">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Messages -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="loading-spinner" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
