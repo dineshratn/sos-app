@@ -1,17 +1,14 @@
 import EmergencyContact, {
   ContactPriority,
   ContactRelationship,
-  EmergencyContactCreationAttributes,
 } from '../models/EmergencyContact';
 import UserProfile from '../models/UserProfile';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import {
   validateContactInfo,
-  formatPhoneNumber,
   sanitizeEmail,
 } from '../utils/contactValidation';
-import { Op } from 'sequelize';
 
 /**
  * Emergency Contact Service
@@ -56,7 +53,14 @@ class EmergencyContactService {
     }
   ): Promise<EmergencyContact[]> {
     try {
-      const where: any = { userId };
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        return [];
+      }
+
+      const where: any = { userProfileId: profile.id };
 
       // Filter by priority if specified
       if (options?.priority) {
@@ -65,7 +69,7 @@ class EmergencyContactService {
 
       // Filter by verification status
       if (options?.includeUnverified === false) {
-        where.isVerified = true;
+        where.isActive = true;
       }
 
       const contacts = await EmergencyContact.findAll({
@@ -88,10 +92,17 @@ class EmergencyContactService {
    */
   public async getContactById(userId: string, contactId: string): Promise<EmergencyContact> {
     try {
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        throw new AppError('User profile not found', 404, 'PROFILE_NOT_FOUND');
+      }
+
       const contact = await EmergencyContact.findOne({
         where: {
           id: contactId,
-          userId,
+          userProfileId: profile.id,
         },
       });
 
@@ -131,7 +142,7 @@ class EmergencyContactService {
 
       // Check contact limit (max 10 contacts per user)
       const existingContactsCount = await EmergencyContact.count({
-        where: { userId },
+        where: { userProfileId },
       });
 
       if (existingContactsCount >= 10) {
@@ -148,7 +159,6 @@ class EmergencyContactService {
 
       // Create the contact
       const contact = await EmergencyContact.create({
-        userId,
         userProfileId,
         name: data.name,
         phoneNumber: formattedPhone,
@@ -243,7 +253,7 @@ class EmergencyContactService {
       const contact = await this.getContactById(userId, contactId);
 
       await contact.update({
-        isVerified: true,
+        isActive: true,
       });
 
       logger.info(`Verified emergency contact: ${contactId} for user: ${userId}`);
@@ -263,7 +273,7 @@ class EmergencyContactService {
   public async getPrimaryContacts(userId: string): Promise<EmergencyContact[]> {
     try {
       return await this.getUserContacts(userId, {
-        priority: ContactPriority.PRIMARY,
+        priority: ContactPriority.CRITICAL,
         includeUnverified: false,
       });
     } catch (error) {
@@ -284,11 +294,9 @@ class EmergencyContactService {
         throw new AppError('Emergency contact not found', 404, 'CONTACT_NOT_FOUND');
       }
 
-      await contact.update({
-        lastNotifiedAt: new Date(),
-      });
-
-      logger.info(`Updated last notified timestamp for contact: ${contactId}`);
+      // Note: lastNotifiedAt field should be added to EmergencyContact model if needed
+      // For now, just log the notification
+      logger.info(`Contact ${contactId} was notified during emergency`);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -321,10 +329,17 @@ class EmergencyContactService {
    */
   public async getVerifiedContacts(userId: string): Promise<EmergencyContact[]> {
     try {
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        return [];
+      }
+
       const contacts = await EmergencyContact.findAll({
         where: {
-          userId,
-          isVerified: true,
+          userProfileId: profile.id,
+          isActive: true,
         },
         order: [
           ['priority', 'ASC'],
@@ -344,8 +359,15 @@ class EmergencyContactService {
    */
   public async countUserContacts(userId: string): Promise<number> {
     try {
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        return 0;
+      }
+
       return await EmergencyContact.count({
-        where: { userId },
+        where: { userProfileId: profile.id },
       });
     } catch (error) {
       logger.error('Error counting contacts:', error);
@@ -358,10 +380,17 @@ class EmergencyContactService {
    */
   public async hasPrimaryContact(userId: string): Promise<boolean> {
     try {
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        return false;
+      }
+
       const count = await EmergencyContact.count({
         where: {
-          userId,
-          priority: ContactPriority.PRIMARY,
+          userProfileId: profile.id,
+          isPrimary: true,
         },
       });
 
@@ -377,31 +406,51 @@ class EmergencyContactService {
    */
   public async getContactStats(userId: string): Promise<{
     total: number;
-    verified: number;
-    unverified: number;
+    active: number;
+    inactive: number;
     byPriority: {
-      primary: number;
-      secondary: number;
-      tertiary: number;
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
     };
   }> {
     try {
-      const [total, verified, primary, secondary, tertiary] = await Promise.all([
-        EmergencyContact.count({ where: { userId } }),
-        EmergencyContact.count({ where: { userId, isVerified: true } }),
-        EmergencyContact.count({ where: { userId, priority: ContactPriority.PRIMARY } }),
-        EmergencyContact.count({ where: { userId, priority: ContactPriority.SECONDARY } }),
-        EmergencyContact.count({ where: { userId, priority: ContactPriority.TERTIARY } }),
+      // Get user profile first
+      const profile = await UserProfile.findOne({ where: { userId } });
+
+      if (!profile) {
+        return {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          byPriority: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+          },
+        };
+      }
+
+      const [total, active, critical, high, medium, low] = await Promise.all([
+        EmergencyContact.count({ where: { userProfileId: profile.id } }),
+        EmergencyContact.count({ where: { userProfileId: profile.id, isActive: true } }),
+        EmergencyContact.count({ where: { userProfileId: profile.id, priority: ContactPriority.CRITICAL } }),
+        EmergencyContact.count({ where: { userProfileId: profile.id, priority: ContactPriority.HIGH } }),
+        EmergencyContact.count({ where: { userProfileId: profile.id, priority: ContactPriority.MEDIUM } }),
+        EmergencyContact.count({ where: { userProfileId: profile.id, priority: ContactPriority.LOW } }),
       ]);
 
       return {
         total,
-        verified,
-        unverified: total - verified,
+        active,
+        inactive: total - active,
         byPriority: {
-          primary,
-          secondary,
-          tertiary,
+          critical,
+          high,
+          medium,
+          low,
         },
       };
     } catch (error) {

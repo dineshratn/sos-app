@@ -32,7 +32,7 @@ declare global {
  */
 export const validateToken = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   try {
