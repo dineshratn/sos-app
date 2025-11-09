@@ -211,10 +211,6 @@ const gracefulShutdown = async (signal: string) => {
   logger.info(`${signal} received, starting graceful shutdown...`);
 
   try {
-    // Close Redis connection
-    const { redisClient } = await import('./middleware/rateLimiter');
-    await redisClient.quit();
-
     logger.info('All connections closed. Exiting process.');
     process.exit(0);
   } catch (error) {

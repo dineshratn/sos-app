@@ -14,7 +14,6 @@ class CircuitBreaker {
   constructor(
     private serviceName: string,
     private threshold: number,
-    private timeout: number,
     private resetTimeout: number
   ) {}
 
@@ -133,7 +132,6 @@ class HttpClient {
       const breaker = new CircuitBreaker(
         name,
         config.circuitBreaker.threshold,
-        config.circuitBreaker.timeout,
         config.circuitBreaker.resetTimeout
       );
       this.circuitBreakers.set(name, breaker);

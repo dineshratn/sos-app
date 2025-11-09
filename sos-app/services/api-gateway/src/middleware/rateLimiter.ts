@@ -1,6 +1,5 @@
 import rateLimit from 'express-rate-limit';
 import config from '../config';
-import logger from '../utils/logger';
 
 /**
  * Global rate limiter
