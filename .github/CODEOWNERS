@@ -1,0 +1,35 @@
+# Code Owners for SOS App
+# These owners will be automatically requested for review when PRs are opened
+
+# Default owners for everything in the repo
+* @devops-team @platform-team
+
+# Infrastructure
+/sos-app/infrastructure/ @devops-team @sre-team
+/sos-app/infrastructure/terraform/ @devops-team
+/sos-app/infrastructure/helm/ @devops-team
+/sos-app/infrastructure/kubernetes/ @devops-team
+
+# Services
+/sos-app/services/auth-service/ @backend-team @security-team
+/sos-app/services/user-service/ @backend-team
+/sos-app/services/medical-service/ @backend-team @security-team @compliance-team
+/sos-app/services/emergency-service/ @backend-team @go-team
+/sos-app/services/location-service/ @backend-team @go-team
+/sos-app/services/notification-service/ @backend-team
+/sos-app/services/communication-service/ @backend-team
+/sos-app/services/device-service/ @backend-team @go-team @iot-team
+/sos-app/services/api-gateway/ @backend-team @platform-team
+/sos-app/services/llm-service/ @backend-team @ai-team
+
+# Applications
+/sos-app/apps/web/ @frontend-team
+/sos-app/apps/mobile-ios/ @mobile-team @ios-team
+/sos-app/apps/mobile-android/ @mobile-team @android-team
+
+# CI/CD
+/.github/workflows/ @devops-team @platform-team
+
+# Documentation
+/docs/ @technical-writers @platform-team
+*.md @technical-writers

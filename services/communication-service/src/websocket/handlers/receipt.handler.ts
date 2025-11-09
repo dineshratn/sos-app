@@ -1,252 +1,262 @@
-/**
- * Receipt Handler
- * Task 134: Handle message:delivered and message:read events
- * Updates message status in MongoDB and publishes to Kafka
- */
-
-import { Server } from 'socket.io';
-import Joi from 'joi';
-import MessageModel from '../../db/schemas/message.schema';
-import kafkaService from '../../services/kafka.service';
-import { AuthenticatedSocket } from '../../middleware/auth.middleware';
-import { DeliveryReceiptRequest } from '../../models/Message';
+import { Server, Socket } from 'socket.io';
+import Message from '../../models/Message';
 import logger from '../../utils/logger';
+import { publishMessageDeliveredEvent, publishMessageReadEvent } from '../../services/kafka.service';
 
-export class ReceiptHandler {
-  private io: Server;
-
-  // Validation schema for receipt
-  private receiptSchema = Joi.object({
-    emergencyId: Joi.string().required(),
-    messageId: Joi.string().required(),
-    userId: Joi.string().required(),
-    status: Joi.string().valid('delivered', 'read').required()
-  });
-
-  constructor(io: Server) {
-    this.io = io;
-  }
-
-  /**
-   * Handle message:delivered event
-   * Marks message as delivered to a specific user
-   */
-  async handleMessageDelivered(
-    socket: AuthenticatedSocket,
-    data: DeliveryReceiptRequest
-  ): Promise<void> {
-    try {
-      // Validate input
-      const { error, value } = this.receiptSchema.validate({
-        ...data,
-        status: 'delivered'
-      });
-
-      if (error) {
-        logger.warn(`Delivery receipt validation failed from socket ${socket.id}:`, error.details);
-        return;
-      }
-
-      const { emergencyId, messageId, userId } = value;
-
-      // Verify user is authenticated and matches userId
-      if (socket.userId !== userId) {
-        logger.warn(
-          `Delivery receipt failed: User ID mismatch. Socket user: ${socket.userId}, Request user: ${userId}`
-        );
-        return;
-      }
-
-      // Update message in database
-      const updatedMessage = await (MessageModel as any).markAsDelivered(messageId, userId);
-
-      if (!updatedMessage) {
-        logger.warn(`Message not found for delivery receipt: ${messageId}`);
-        return;
-      }
-
-      logger.info(`Message ${messageId} marked as delivered to user ${userId}`);
-
-      // Broadcast delivery receipt to sender and other participants
-      this.io.to(emergencyId).emit('message:delivered', {
-        messageId,
-        userId,
-        timestamp: new Date()
-      });
-
-      // Publish to Kafka
-      await kafkaService.publishMessageDeliveredEvent({
-        emergencyId,
-        messageId,
-        userId
-      });
-    } catch (error) {
-      logger.error('Error in handleMessageDelivered:', error);
-    }
-  }
-
-  /**
-   * Handle message:read event
-   * Marks message as read by a specific user
-   */
-  async handleMessageRead(
-    socket: AuthenticatedSocket,
-    data: DeliveryReceiptRequest
-  ): Promise<void> {
-    try {
-      // Validate input
-      const { error, value } = this.receiptSchema.validate({
-        ...data,
-        status: 'read'
-      });
-
-      if (error) {
-        logger.warn(`Read receipt validation failed from socket ${socket.id}:`, error.details);
-        return;
-      }
-
-      const { emergencyId, messageId, userId } = value;
-
-      // Verify user is authenticated and matches userId
-      if (socket.userId !== userId) {
-        logger.warn(
-          `Read receipt failed: User ID mismatch. Socket user: ${socket.userId}, Request user: ${userId}`
-        );
-        return;
-      }
-
-      // Update message in database
-      const updatedMessage = await (MessageModel as any).markAsRead(messageId, userId);
-
-      if (!updatedMessage) {
-        logger.warn(`Message not found for read receipt: ${messageId}`);
-        return;
-      }
-
-      logger.info(`Message ${messageId} marked as read by user ${userId}`);
-
-      // Broadcast read receipt to sender and other participants
-      this.io.to(emergencyId).emit('message:read', {
-        messageId,
-        userId,
-        timestamp: new Date()
-      });
-
-      // Publish to Kafka
-      await kafkaService.publishMessageReadEvent({
-        emergencyId,
-        messageId,
-        userId
-      });
-    } catch (error) {
-      logger.error('Error in handleMessageRead:', error);
-    }
-  }
-
-  /**
-   * Handle batch delivery receipts
-   * Marks multiple messages as delivered at once
-   */
-  async handleBatchDelivered(
-    socket: AuthenticatedSocket,
-    data: { emergencyId: string; messageIds: string[]; userId: string }
-  ): Promise<void> {
-    try {
-      const { emergencyId, messageIds, userId } = data;
-
-      if (!emergencyId || !messageIds || !userId || !Array.isArray(messageIds)) {
-        logger.warn(`Batch delivery receipt: Invalid data from socket ${socket.id}`);
-        return;
-      }
-
-      // Verify user is authenticated and matches userId
-      if (socket.userId !== userId) {
-        logger.warn(
-          `Batch delivery receipt failed: User ID mismatch. Socket user: ${socket.userId}, Request user: ${userId}`
-        );
-        return;
-      }
-
-      // Process each message
-      for (const messageId of messageIds) {
-        await this.handleMessageDelivered(socket, {
-          emergencyId,
-          messageId,
-          userId,
-          status: 'delivered'
-        });
-      }
-
-      logger.info(`Batch delivery receipt: ${messageIds.length} messages marked as delivered to user ${userId}`);
-    } catch (error) {
-      logger.error('Error in handleBatchDelivered:', error);
-    }
-  }
-
-  /**
-   * Handle batch read receipts
-   * Marks multiple messages as read at once
-   */
-  async handleBatchRead(
-    socket: AuthenticatedSocket,
-    data: { emergencyId: string; messageIds: string[]; userId: string }
-  ): Promise<void> {
-    try {
-      const { emergencyId, messageIds, userId } = data;
-
-      if (!emergencyId || !messageIds || !userId || !Array.isArray(messageIds)) {
-        logger.warn(`Batch read receipt: Invalid data from socket ${socket.id}`);
-        return;
-      }
-
-      // Verify user is authenticated and matches userId
-      if (socket.userId !== userId) {
-        logger.warn(
-          `Batch read receipt failed: User ID mismatch. Socket user: ${socket.userId}, Request user: ${userId}`
-        );
-        return;
-      }
-
-      // Process each message
-      for (const messageId of messageIds) {
-        await this.handleMessageRead(socket, {
-          emergencyId,
-          messageId,
-          userId,
-          status: 'read'
-        });
-      }
-
-      logger.info(`Batch read receipt: ${messageIds.length} messages marked as read by user ${userId}`);
-    } catch (error) {
-      logger.error('Error in handleBatchRead:', error);
-    }
-  }
-
-  /**
-   * Register all receipt-related event handlers
-   */
-  registerHandlers(socket: AuthenticatedSocket): void {
-    // Single message delivery receipt
-    socket.on('message:delivered', (data: DeliveryReceiptRequest) => {
-      this.handleMessageDelivered(socket, data);
-    });
-
-    // Single message read receipt
-    socket.on('message:read', (data: DeliveryReceiptRequest) => {
-      this.handleMessageRead(socket, data);
-    });
-
-    // Batch delivery receipts
-    socket.on('message:batch-delivered', (data) => {
-      this.handleBatchDelivered(socket, data);
-    });
-
-    // Batch read receipts
-    socket.on('message:batch-read', (data) => {
-      this.handleBatchRead(socket, data);
-    });
-
-    logger.info(`Receipt handlers registered for socket ${socket.id}`);
-  }
+interface MessageDeliveredData {
+  messageId: string;
+  emergencyId: string;
 }
+
+interface MessageReadData {
+  messageId: string;
+  emergencyId: string;
+}
+
+/**
+ * Handle message delivered receipt
+ */
+export const handleMessageDelivered = async (
+  io: Server,
+  socket: Socket,
+  data: MessageDeliveredData
+): Promise<void> => {
+  try {
+    const user = socket.data.user;
+    const { messageId, emergencyId } = data;
+
+    if (!messageId || !emergencyId) {
+      socket.emit('error', {
+        code: 'INVALID_REQUEST',
+        message: 'messageId and emergencyId are required',
+      });
+      return;
+    }
+
+    // Verify user is in the emergency room
+    const rooms = Array.from(socket.rooms);
+    if (!rooms.includes(emergencyId)) {
+      return;
+    }
+
+    // Update message delivered status in MongoDB
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        delivered: true,
+        deliveredAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!message) {
+      logger.warn('Message not found for delivery receipt', {
+        messageId,
+        emergencyId,
+        userId: user.userId,
+      });
+      return;
+    }
+
+    logger.debug('Message marked as delivered', {
+      messageId,
+      emergencyId,
+      userId: user.userId,
+      deliveredAt: message.deliveredAt,
+    });
+
+    // Broadcast delivery receipt to all users in the room
+    io.to(emergencyId).emit('message:delivered', {
+      messageId,
+      emergencyId,
+      deliveredBy: user.userId,
+      deliveredAt: message.deliveredAt?.toISOString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Publish MessageDelivered event to Kafka
+    await publishMessageDeliveredEvent(messageId, emergencyId, user.userId);
+
+  } catch (error: any) {
+    logger.error('Error handling message delivered receipt', {
+      socketId: socket.id,
+      userId: socket.data.user?.userId,
+      messageId: data.messageId,
+      emergencyId: data.emergencyId,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Handle message read receipt
+ */
+export const handleMessageRead = async (
+  io: Server,
+  socket: Socket,
+  data: MessageReadData
+): Promise<void> => {
+  try {
+    const user = socket.data.user;
+    const { messageId, emergencyId } = data;
+
+    if (!messageId || !emergencyId) {
+      socket.emit('error', {
+        code: 'INVALID_REQUEST',
+        message: 'messageId and emergencyId are required',
+      });
+      return;
+    }
+
+    // Verify user is in the emergency room
+    const rooms = Array.from(socket.rooms);
+    if (!rooms.includes(emergencyId)) {
+      return;
+    }
+
+    // Update message read status in MongoDB
+    const message = await Message.findByIdAndUpdate(
+      messageId,
+      {
+        read: true,
+        readAt: new Date(),
+        // Also mark as delivered if not already
+        $setOnInsert: {
+          delivered: true,
+          deliveredAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!message) {
+      logger.warn('Message not found for read receipt', {
+        messageId,
+        emergencyId,
+        userId: user.userId,
+      });
+      return;
+    }
+
+    logger.debug('Message marked as read', {
+      messageId,
+      emergencyId,
+      userId: user.userId,
+      readAt: message.readAt,
+    });
+
+    // Broadcast read receipt to all users in the room
+    io.to(emergencyId).emit('message:read', {
+      messageId,
+      emergencyId,
+      readBy: user.userId,
+      readAt: message.readAt?.toISOString(),
+      timestamp: new Date().toISOString(),
+    });
+
+    // Publish MessageRead event to Kafka
+    await publishMessageReadEvent(messageId, emergencyId, user.userId);
+
+  } catch (error: any) {
+    logger.error('Error handling message read receipt', {
+      socketId: socket.id,
+      userId: socket.data.user?.userId,
+      messageId: data.messageId,
+      emergencyId: data.emergencyId,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Bulk mark messages as delivered
+ */
+export const bulkMarkMessagesDelivered = async (
+  socket: Socket,
+  emergencyId: string,
+  messageIds: string[]
+): Promise<void> => {
+  try {
+    const user = socket.data.user;
+
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    // Update all messages in bulk
+    const result = await Message.updateMany(
+      {
+        _id: { $in: messageIds },
+        emergencyId,
+        delivered: false,
+      },
+      {
+        delivered: true,
+        deliveredAt: new Date(),
+      }
+    );
+
+    logger.info('Bulk marked messages as delivered', {
+      emergencyId,
+      userId: user.userId,
+      count: result.modifiedCount,
+    });
+
+  } catch (error: any) {
+    logger.error('Error bulk marking messages as delivered', {
+      emergencyId,
+      userId: socket.data.user?.userId,
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Bulk mark messages as read
+ */
+export const bulkMarkMessagesRead = async (
+  socket: Socket,
+  emergencyId: string,
+  messageIds: string[]
+): Promise<void> => {
+  try {
+    const user = socket.data.user;
+
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    // Update all messages in bulk
+    const result = await Message.updateMany(
+      {
+        _id: { $in: messageIds },
+        emergencyId,
+        read: false,
+      },
+      {
+        read: true,
+        readAt: new Date(),
+      }
+    );
+
+    logger.info('Bulk marked messages as read', {
+      emergencyId,
+      userId: user.userId,
+      count: result.modifiedCount,
+    });
+
+  } catch (error: any) {
+    logger.error('Error bulk marking messages as read', {
+      emergencyId,
+      userId: socket.data.user?.userId,
+      error: error.message,
+    });
+  }
+};
+
+export default {
+  handleMessageDelivered,
+  handleMessageRead,
+  bulkMarkMessagesDelivered,
+  bulkMarkMessagesRead,
+};

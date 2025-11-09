@@ -112,7 +112,7 @@ export function calculateRetryDelay(attemptNumber: number): number {
  * Check if notification should be retried
  */
 export function shouldRetry(
-  _channel: NotificationChannel,
+  channel: NotificationChannel,
   attemptsMade: number,
   errorCode?: string
 ): boolean {

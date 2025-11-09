@@ -133,7 +133,7 @@ async function processNotificationJob(job: Job<NotificationJob>): Promise<any> {
     );
 
     // Check if we should retry with fallback channel
-    await handleRetry(jobData, job.attemptsMade + 1);
+    const shouldRetryFallback = await handleRetry(jobData, job.attemptsMade + 1);
 
     // If this is the last attempt, update batch stats
     if (job.attemptsMade + 1 >= (job.opts.attempts || 3)) {

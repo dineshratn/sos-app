@@ -1,4 +1,4 @@
-import apn from '@parse/node-apn';
+import apn from 'node-apn';
 import fs from 'fs';
 import { config } from '../config';
 import { logger } from '../utils/logger';
@@ -91,13 +91,13 @@ class APNsProvider {
       };
 
       // iOS 15+ interruption level
-      (notification as any).interruption = 'critical';
+      notification.interruption = 'critical';
 
       // Badge
       notification.badge = 1;
 
       // Category for action buttons
-      (notification as any).category = 'EMERGENCY_ALERT';
+      notification.category = 'EMERGENCY_ALERT';
 
       // Payload data
       notification.payload = {
@@ -176,7 +176,7 @@ class APNsProvider {
   /**
    * Send to multiple tokens
    */
-  async sendMultiple(tokens: string[], job: NotificationJob): Promise<apn.Responses<any, any>> {
+  async sendMultiple(tokens: string[], job: NotificationJob): Promise<apn.Responses> {
     if (!this.initialized || !this.provider) {
       throw new Error('APNs provider not initialized');
     }
@@ -191,7 +191,7 @@ class APNsProvider {
       name: 'emergency.caf',
       volume: 1.0,
     };
-    (notification as any).interruption = 'critical';
+    notification.interruption = 'critical';
     notification.badge = 1;
     notification.payload = {
       emergencyId: job.emergencyId,

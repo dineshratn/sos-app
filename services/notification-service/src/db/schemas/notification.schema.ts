@@ -4,6 +4,7 @@ import {
   NotificationChannel,
   NotificationStatus,
   NotificationPriority,
+  NotificationMetadata,
 } from '../../models/Notification';
 
 export interface NotificationDocument extends Omit<Notification, 'id'>, Document {
@@ -115,7 +116,7 @@ notificationSchema.virtual('id').get(function () {
 // Ensure virtuals are included in JSON
 notificationSchema.set('toJSON', {
   virtuals: true,
-  transform: (_doc, ret: any) => {
+  transform: (doc, ret) => {
     delete ret._id;
     delete ret.__v;
     return ret;

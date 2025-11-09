@@ -234,13 +234,13 @@ export function cleanupAllEscalations(): void {
   });
 
   // Clear all timers
-  escalationTimers.forEach((timer, _emergencyId) => {
+  escalationTimers.forEach((timer, emergencyId) => {
     clearTimeout(timer);
   });
   escalationTimers.clear();
 
   // Clear all intervals
-  followUpIntervals.forEach((interval, _emergencyId) => {
+  followUpIntervals.forEach((interval, emergencyId) => {
     clearInterval(interval);
   });
   followUpIntervals.clear();

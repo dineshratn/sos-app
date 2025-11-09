@@ -162,7 +162,7 @@ class FCMProvider {
       },
     };
 
-    return await (admin.messaging() as any).sendMulticast(message);
+    return await admin.messaging().sendMulticast(message);
   }
 
   /**

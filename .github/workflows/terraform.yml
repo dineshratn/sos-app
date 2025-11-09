@@ -1,0 +1,151 @@
+name: Terraform Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sos-app/infrastructure/terraform/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'sos-app/infrastructure/terraform/**'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action (plan/apply/destroy)'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  AWS_REGION: ap-south-2
+  TF_VERSION: 1.5.7
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: sos-app/infrastructure/terraform
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="bucket=sos-app-terraform-state" \
+            -backend-config="key=infrastructure/${{ github.event.inputs.environment || 'dev' }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=sos-app-terraform-locks" \
+            -backend-config="encrypt=true"
+        working-directory: sos-app/infrastructure/terraform
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+        working-directory: sos-app/infrastructure/terraform
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event.inputs.action != 'apply' && github.event.inputs.action != 'destroy'
+        run: |
+          terraform plan \
+            -var-file=environments/${{ github.event.inputs.environment || 'dev' }}/terraform.tfvars \
+            -out=tfplan \
+            -no-color
+        working-directory: sos-app/infrastructure/terraform
+        continue-on-error: true
+
+      - name: Terraform Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request' && steps.plan.outcome == 'success'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve tfplan
+        working-directory: sos-app/infrastructure/terraform
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: |
+          terraform destroy \
+            -var-file=environments/${{ github.event.inputs.environment }}/terraform.tfvars \
+            -auto-approve
+        working-directory: sos-app/infrastructure/terraform
+
+      - name: Save Terraform Outputs
+        if: github.event.inputs.action == 'apply'
+        run: |
+          terraform output -json > terraform-outputs.json
+          cat terraform-outputs.json
+        working-directory: sos-app/infrastructure/terraform
+
+      - name: Upload Terraform Outputs
+        if: github.event.inputs.action == 'apply'
+        uses: actions/upload-artifact@v5
+        with:
+          name: terraform-outputs
+          path: sos-app/infrastructure/terraform/terraform-outputs.json

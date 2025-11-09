@@ -33,7 +33,7 @@ class NotificationService {
     }));
 
     // Compression
-    this.app.use(compression() as any);
+    this.app.use(compression());
 
     // Body parsing
     this.app.use(express.json({ limit: '10mb' }));
@@ -50,7 +50,7 @@ class NotificationService {
     this.app.use('/api/', limiter);
 
     // Request logging
-    this.app.use((req: Request, _res: Response, next: NextFunction) => {
+    this.app.use((req: Request, res: Response, next: NextFunction) => {
       logger.info(`${req.method} ${req.path}`, {
         ip: req.ip,
         userAgent: req.get('user-agent'),
@@ -61,7 +61,7 @@ class NotificationService {
 
   private initializeRoutes(): void {
     // Health check endpoint
-    this.app.get('/health', (_req: Request, res: Response) => {
+    this.app.get('/health', (req: Request, res: Response) => {
       res.status(200).json({
         status: 'healthy',
         service: 'notification-service',
@@ -86,7 +86,7 @@ class NotificationService {
   }
 
   private initializeErrorHandling(): void {
-    this.app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+    this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
       logger.error('Unhandled error', {
         error: err.message,
         stack: err.stack,

@@ -133,9 +133,9 @@ class EmailProvider {
     try {
       const responses = await sgMail.send(messages);
 
-      return (responses as any[]).map((response: any) => ({
+      return responses.map(([response]) => ({
         success: true,
-        messageId: Array.isArray(response) ? response[0]?.headers['x-message-id'] as string : response?.headers['x-message-id'] as string,
+        messageId: response.headers['x-message-id'] as string,
       }));
     } catch (error: any) {
       logger.error('Failed to send bulk email', {

@@ -40,7 +40,7 @@ export const pushTemplates = {
   followUp: {
     title: (data: TemplateData) =>
       `⚠️ REMINDER: ${data.userName} needs help`,
-    body: (_data: TemplateData) =>
+    body: (data: TemplateData) =>
       `Emergency still active. Please acknowledge and respond if you can assist.`,
   },
 };
@@ -181,7 +181,7 @@ export const emailTemplates = {
       `Please respond immediately: ${data.emergencyLink}\n\n` +
       `Time sent: ${new Date().toLocaleString()}`,
 
-    html: (_data: TemplateData) =>
+    html: (data: TemplateData) =>
       `<!-- Similar HTML structure with urgent styling -->`,
   },
 
@@ -240,16 +240,16 @@ export function getTemplate(
 ): any {
   switch (channel) {
     case 'PUSH':
-      return (pushTemplates as any)[type] ? (pushTemplates as any)[type] : pushTemplates.emergencyAlert;
+      return pushTemplates[type] ? pushTemplates[type] : pushTemplates.emergencyAlert;
 
     case 'SMS':
-      return (smsTemplates as any)[type] ? (smsTemplates as any)[type](data) : smsTemplates.emergencyAlert(data);
+      return smsTemplates[type] ? smsTemplates[type](data) : smsTemplates.emergencyAlert(data);
 
     case 'EMAIL':
-      return (emailTemplates as any)[type] || emailTemplates.emergencyAlert;
+      return emailTemplates[type] || emailTemplates.emergencyAlert;
 
     case 'WEBSOCKET':
-      return (websocketTemplates as any)[type] ? (websocketTemplates as any)[type](data) : websocketTemplates.emergencyAlert(data);
+      return websocketTemplates[type] ? websocketTemplates[type](data) : websocketTemplates.emergencyAlert(data);
 
     default:
       return null;

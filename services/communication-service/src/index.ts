@@ -1,191 +1,121 @@
-/**
- * Communication Service Entry Point
- * Real-time messaging and communication service for SOS App
- */
-
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import helmet from 'helmet';
+import express, { Express, Request, Response, NextFunction } from 'express';
+import http from 'http';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import redisService from './services/redis.service';
-import mongoDBConnection from './db/connection';
-import kafkaService from './services/kafka.service';
-import { setupSocketIOWithRedis, setupSocketIOMiddleware } from './websocket/socket.server';
-import { RoomHandler } from './handlers/room.handler';
-import { MessageHandler } from './websocket/handlers/message.handler';
-import { TypingHandler } from './websocket/handlers/typing.handler';
-import { ReceiptHandler } from './websocket/handlers/receipt.handler';
-import { authenticateSocket } from './middleware/auth.middleware';
-import messageRoutes from './routes/message.routes';
-import mediaRoutes from './routes/media.routes';
+import helmet from 'helmet';
+import compression from 'compression';
+import { connectMongoDB } from './db/mongodb';
+import { initializeSocketServer } from './websocket/socket.server';
+import config from './config';
 import logger from './utils/logger';
 
-// Load environment variables
-dotenv.config();
+// Routes (will be added in subsequent tasks)
+import messageRoutes from './routes/message.routes';
+import mediaRoutes from './routes/media.routes';
 
-const PORT = process.env.PORT || 3003;
-const CORS_ORIGIN = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000'];
+const app: Express = express();
+const server = http.createServer(app);
 
-// Initialize Express app
-const app = express();
-
-// Security middleware
+// Middleware
 app.use(helmet());
 app.use(cors({
-  origin: CORS_ORIGIN,
-  credentials: true
+  origin: config.server.corsOrigin,
+  credentials: true,
 }));
-app.use(express.json());
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Request logging middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.info('HTTP Request', {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration: `${duration}ms`,
+    });
+  });
+  next();
+});
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'communication-service',
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // API Routes
 app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/media', mediaRoutes);
 
-// Health check endpoint
-app.get('/health', (_req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    service: 'communication-service',
-    timestamp: new Date().toISOString(),
-    mongodb: mongoDBConnection.isConnectedStatus(),
-    redis: redisService.isConnected,
-    kafka: kafkaService.isConnectedStatus()
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: 'Resource not found',
+      path: req.path,
+    },
   });
 });
 
-// Create HTTP server
-const httpServer = createServer(app);
+// Error handling middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error('Unhandled error', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
 
-// Initialize Socket.IO server with Redis adapter (will be setup in startServer)
-let io: Server;
+  res.status(500).json({
+    error: {
+      code: 'INTERNAL_SERVER_ERROR',
+      message: config.server.env === 'production' ? 'An unexpected error occurred' : err.message,
+    },
+  });
+});
 
-async function setupSocketIO() {
-  io = await setupSocketIOWithRedis(httpServer, CORS_ORIGIN);
-  setupSocketIOMiddleware(io);
-
-  // Apply authentication middleware to all Socket.IO connections
-  io.use(authenticateSocket);
-
-  return io;
-}
-
-// Initialize services and start server
-async function startServer() {
+// Initialize server
+const startServer = async () => {
   try {
     // Connect to MongoDB
-    await mongoDBConnection.connect();
-    logger.info('MongoDB connection established');
+    await connectMongoDB();
 
-    // Connect to Redis
-    await redisService.connect();
-    logger.info('Redis connection established');
-
-    // Connect to Kafka
-    try {
-      await kafkaService.connect();
-      logger.info('Kafka connection established');
-    } catch (error) {
-      logger.warn('Kafka connection failed, continuing without event publishing:', error);
-    }
-
-    // Setup Socket.IO with Redis adapter
-    io = await setupSocketIO();
-    logger.info('Socket.IO configured with Redis adapter');
-
-    // Initialize handlers
-    const roomHandler = new RoomHandler(io);
-    const messageHandler = new MessageHandler(io);
-    const typingHandler = new TypingHandler(io);
-    const receiptHandler = new ReceiptHandler(io);
-
-    // Handle Socket.IO connections
-    io.on('connection', (socket) => {
-      logger.info(`Client connected: ${socket.id}`);
-
-      // Register all handlers
-      roomHandler.registerHandlers(socket as any);
-      messageHandler.registerHandlers(socket as any);
-      typingHandler.registerHandlers(socket as any);
-      receiptHandler.registerHandlers(socket as any);
-
-      // Handle disconnection
-      socket.on('disconnect', (reason) => {
-        logger.info(`Client disconnected: ${socket.id}, reason: ${reason}`);
-      });
-
-      // Handle connection errors
-      socket.on('error', (error) => {
-        logger.error(`Socket error for ${socket.id}:`, error);
-      });
-    });
+    // Initialize Socket.IO server
+    initializeSocketServer(server);
 
     // Start HTTP server
-    httpServer.listen(PORT, () => {
-      logger.info(`Communication service listening on port ${PORT}`);
-      logger.info(`WebSocket server ready for connections`);
+    server.listen(config.server.port, () => {
+      logger.info('Communication Service started', {
+        port: config.server.port,
+        env: config.server.env,
+      });
     });
   } catch (error) {
-    logger.error('Failed to start server:', error);
+    logger.error('Failed to start server', { error });
     process.exit(1);
   }
-}
+};
 
 // Graceful shutdown
-async function gracefulShutdown(signal: string) {
-  logger.info(`Received ${signal}, starting graceful shutdown`);
-
-  try {
-    // Close Socket.IO connections
-    if (io) {
-      io.close(() => {
-        logger.info('Socket.IO server closed');
-      });
-    }
-
-    // Close HTTP server
-    httpServer.close(() => {
-      logger.info('HTTP server closed');
-    });
-
-    // Disconnect from MongoDB
-    await mongoDBConnection.disconnect();
-    logger.info('MongoDB disconnected');
-
-    // Disconnect from Redis
-    await redisService.disconnect();
-    logger.info('Redis disconnected');
-
-    // Disconnect from Kafka
-    await kafkaService.disconnect();
-    logger.info('Kafka disconnected');
-
+const shutdown = async () => {
+  logger.info('Shutting down Communication Service...');
+  server.close(() => {
+    logger.info('HTTP server closed');
     process.exit(0);
-  } catch (error) {
-    logger.error('Error during shutdown:', error);
-    process.exit(1);
-  }
-}
+  });
+};
 
-// Handle termination signals
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  gracefulShutdown('uncaughtException');
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  gracefulShutdown('unhandledRejection');
-});
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // Start the server
 startServer();
 
-export { app, io, httpServer };
+export { app, server };
