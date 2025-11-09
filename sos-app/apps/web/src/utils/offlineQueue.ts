@@ -1,5 +1,14 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 
+// Background Sync API types
+declare global {
+  interface ServiceWorkerRegistration {
+    sync: {
+      register(tag: string): Promise<void>;
+    };
+  }
+}
+
 interface OfflineQueueDB extends DBSchema {
   'emergency-queue': {
     key: number;
