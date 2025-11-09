@@ -1,0 +1,401 @@
+# Lightweight Docker Compose - Using Bitnami images (Recommended)
+# Smaller footprint, faster startup, better for development
+
+version: '3.8'
+
+services:
+  # ==================== DATABASES ====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: sos-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sos_password}
+      POSTGRES_DB: ${POSTGRES_DB:-sos_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sos_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: sos-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin_password}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-sos_db}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  # ==================== CACHING & MESSAGE QUEUE ====================
+  redis:
+    image: redis:7-alpine
+    container_name: sos-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sos-network
+    # Simplified command - AOF disabled to avoid permission issues
+    command: redis-server --save 60 1000 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  # ==================== LIGHTWEIGHT KAFKA/ZOOKEEPER ====================
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    container_name: sos-zookeeper
+    environment:
+      ZOO_CFG_EXTRA: "maxClientCnxns=0"
+      ZOO_SYNC_LIMIT: 10
+      ZOO_INIT_LIMIT: 5
+      # Reduce memory usage
+      SERVER_HEAP_SIZE: 256
+    ports:
+      - "2181:2181"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "-w", "2", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: sos-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_CFG_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_NUM_PARTITIONS: 1
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_CFG_LOG_RETENTION_HOURS: 24
+      KAFKA_CFG_LOG_RETENTION_BYTES: 104857600
+      # Reduce memory usage
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "29092:29092"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    restart: unless-stopped
+
+  # ==================== NODE.JS SERVICES ====================
+  auth-service:
+    build:
+      context: ./sos-app
+      dockerfile: services/auth-service/Dockerfile
+    container_name: sos-auth-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sos_user}:${POSTGRES_PASSWORD:-sos_password}@postgres:5432/${POSTGRES_DB:-sos_db}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      DEBUG: sos:*
+    ports:
+      - "3001:3001"
+      - "9230:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/auth-service/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: ./sos-app
+      dockerfile: services/user-service/Dockerfile
+    container_name: sos-user-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sos_user}:${POSTGRES_PASSWORD:-sos_password}@postgres:5432/${POSTGRES_DB:-sos_db}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      DEBUG: sos:*
+    ports:
+      - "3002:3002"
+      - "9231:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/user-service/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  communication-service:
+    build:
+      context: ./sos-app
+      dockerfile: services/communication-service/Dockerfile
+    container_name: sos-communication-service
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3003
+      MONGODB_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin_password}@mongodb:27017/${MONGO_DB:-sos_db}?authSource=admin
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: communication-service
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      DEBUG: sos:*
+    ports:
+      - "3003:3003"
+      - "9232:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/communication-service/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  medical-service:
+    build:
+      context: ./sos-app
+      dockerfile: services/medical-service/Dockerfile
+    container_name: sos-medical-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3004
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sos_user}:${POSTGRES_PASSWORD:-sos_password}@postgres:5432/${POSTGRES_DB:-sos_db}
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      DEBUG: sos:*
+    ports:
+      - "3004:3004"
+      - "9233:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/medical-service/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./sos-app
+      dockerfile: services/notification-service/Dockerfile
+    container_name: sos-notification-service
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3005
+      MONGODB_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin_password}@mongodb:27017/${MONGO_DB:-sos_db}?authSource=admin
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: notification-service
+      KAFKA_GROUP_ID: notification-service-group
+      KAFKA_TOPICS_EMERGENCY_CREATED: emergency-created
+      KAFKA_TOPICS_ESCALATION: emergency-escalation
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      DEBUG: sos:*
+    ports:
+      - "3005:3005"
+      - "9234:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/notification-service/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./sos-app
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: sos-api-gateway
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+      medical-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:29092
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+      COMMUNICATION_SERVICE_URL: http://communication-service:3003
+      MEDICAL_SERVICE_URL: http://medical-service:3004
+      NOTIFICATION_SERVICE_URL: http://notification-service:3005
+      DEBUG: sos:*
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    networks:
+      - sos-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./sos-app/services/api-gateway/src:/app/src
+    command: npm run dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  sos-network:
+    driver: bridge
