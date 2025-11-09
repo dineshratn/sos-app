@@ -23,7 +23,7 @@ export const errorHandler = (
   err: Error | AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
   let statusCode = 500;
   let code = 'INTERNAL_SERVER_ERROR';
@@ -59,9 +59,9 @@ export const errorHandler = (
 /**
  * 404 Not Found handler
  */
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (_req: Request, res: Response, next: NextFunction) => {
   const error = new AppError(
-    `Route ${req.method} ${req.path} not found`,
+    `Route ${_req.method} ${_req.path} not found`,
     404,
     'ROUTE_NOT_FOUND'
   );

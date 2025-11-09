@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import config, { ServiceConfig } from '../config';
+import config from '../config';
 import logger from './logger';
 import { AppError } from '../middleware/errorHandler';
 
@@ -241,12 +241,12 @@ class HttpClient {
   public async get<T>(
     serviceName: keyof typeof config.services,
     path: string,
-    config?: AxiosRequestConfig
+    reqConfig?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
     return this.request<T>(serviceName, {
       method: 'GET',
       url: path,
-      ...config,
+      ...reqConfig,
     });
   }
 
@@ -257,13 +257,13 @@ class HttpClient {
     serviceName: keyof typeof config.services,
     path: string,
     data?: any,
-    config?: AxiosRequestConfig
+    reqConfig?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
     return this.request<T>(serviceName, {
       method: 'POST',
       url: path,
       data,
-      ...config,
+      ...reqConfig,
     });
   }
 
@@ -274,13 +274,13 @@ class HttpClient {
     serviceName: keyof typeof config.services,
     path: string,
     data?: any,
-    config?: AxiosRequestConfig
+    reqConfig?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
     return this.request<T>(serviceName, {
       method: 'PUT',
       url: path,
       data,
-      ...config,
+      ...reqConfig,
     });
   }
 
@@ -291,13 +291,13 @@ class HttpClient {
     serviceName: keyof typeof config.services,
     path: string,
     data?: any,
-    config?: AxiosRequestConfig
+    reqConfig?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
     return this.request<T>(serviceName, {
       method: 'PATCH',
       url: path,
       data,
-      ...config,
+      ...reqConfig,
     });
   }
 
@@ -307,12 +307,12 @@ class HttpClient {
   public async delete<T>(
     serviceName: keyof typeof config.services,
     path: string,
-    config?: AxiosRequestConfig
+    reqConfig?: AxiosRequestConfig
   ): Promise<AxiosResponse<T>> {
     return this.request<T>(serviceName, {
       method: 'DELETE',
       url: path,
-      ...config,
+      ...reqConfig,
     });
   }
 
