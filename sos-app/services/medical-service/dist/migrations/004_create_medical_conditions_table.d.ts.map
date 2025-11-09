@@ -1,0 +1,1 @@
+{"version":3,"file":"004_create_medical_conditions_table.d.ts","sourceRoot":"","sources":["../../src/migrations/004_create_medical_conditions_table.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAa,MAAM,WAAW,CAAC;;yBAGzB,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;2BAsH5B,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;;AAvH7D,wBA0HE"}

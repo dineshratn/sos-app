@@ -1,0 +1,1 @@
+{"version":3,"file":"005_create_medical_access_audit_table.d.ts","sourceRoot":"","sources":["../../src/migrations/005_create_medical_access_audit_table.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAa,MAAM,WAAW,CAAC;;yBAGzB,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;2BAsJ5B,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;;AAvJ7D,wBAmKE"}
