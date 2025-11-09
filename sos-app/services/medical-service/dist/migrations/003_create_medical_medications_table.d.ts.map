@@ -1,0 +1,1 @@
+{"version":3,"file":"003_create_medical_medications_table.d.ts","sourceRoot":"","sources":["../../src/migrations/003_create_medical_medications_table.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAa,MAAM,WAAW,CAAC;;yBAGzB,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;2BA0H5B,cAAc,KAAG,OAAO,CAAC,IAAI,CAAC;;AA3H7D,wBA8HE"}
