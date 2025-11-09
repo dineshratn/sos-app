@@ -1,59 +1,45 @@
-# Multi-stage build for Communication Service
-
-# Stage 1: Build
+# Multi-stage build for Node.js service with debug support
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Copy monorepo files
+COPY package.json package-lock.json ./
+
+# Copy all services and libs to recognize workspace structure
+COPY services ./services
+COPY libs ./libs
 
 # Install dependencies
-RUN npm ci
-
-# Copy source code
-COPY src ./src
-COPY tsconfig.json ./
+RUN npm ci --legacy-peer-deps
 
 # Build TypeScript
-RUN npm run build
+RUN npm run build -w services/communication-service
 
-# Stage 2: Production
+# Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
-# Create non-root user
-RUN addgroup -g 1000 nodejs && \
-    adduser -S nodejs -u 1000
+# Install runtime dependencies
+RUN apk add --no-cache dumb-init curl
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
+# Install production dependencies
+ENV HUSKY=0
+RUN npm ci --ignore-scripts --omit=dev --legacy-peer-deps
 
 # Copy built application from builder
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/services/communication-service/dist ./dist
 
-# Create uploads directory for media files
-RUN mkdir -p /app/uploads && chown -R nodejs:nodejs /app
+EXPOSE 3000 9229
 
-# Switch to non-root user
-USER nodejs
+ENTRYPOINT ["/sbin/dumb-init", "--"]
 
-# Expose port
-EXPOSE 3004
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3004/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Run the application
-CMD ["node", "dist/index.js"]
+# Run with Node inspect enabled for debugging
+CMD ["node", "--inspect=0.0.0.0:9229", "dist/index.js"]

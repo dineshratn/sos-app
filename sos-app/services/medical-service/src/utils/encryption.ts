@@ -45,8 +45,8 @@ export function encrypt(plaintext: string | null | undefined): string | null {
     let encrypted = cipher.update(plaintext, 'utf8', 'hex');
     encrypted += cipher.final('hex');
 
-    // Get the authentication tag
-    const authTag = cipher.getAuthTag();
+    // Get the authentication tag (CipherGCM method)
+    const authTag = (cipher as any).getAuthTag();
 
     // Combine all parts into a single string for storage
     const encryptedData: EncryptedData = {
@@ -89,7 +89,7 @@ export function decrypt(encryptedText: string | null | undefined): string | null
 
     // Create decipher
     const decipher = crypto.createDecipheriv(config.encryption.algorithm, key, iv);
-    decipher.setAuthTag(authTag);
+    (decipher as any).setAuthTag(authTag);
 
     // Decrypt the data
     let decrypted = decipher.update(encryptedData.encrypted, 'hex', 'utf8');

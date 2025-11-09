@@ -30,6 +30,11 @@ interface Config {
     expiresIn: string;
   };
 
+  // Auth
+  auth: {
+    jwtSecret: string;
+  };
+
   // Auth Service
   authService: {
     url: string;
@@ -86,6 +91,11 @@ const config: Config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+  },
+
+  // Auth Configuration
+  auth: {
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
   },
 
   // Auth Service Configuration

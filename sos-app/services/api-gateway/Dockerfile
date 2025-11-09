@@ -1,51 +1,45 @@
-# Multi-stage build for API Gateway
-
-# Stage 1: Build
+# Multi-stage build for Node.js service with debug support
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Copy monorepo files
+COPY package.json package-lock.json ./
+
+# Copy all services and libs to recognize workspace structure
+COPY services ./services
+COPY libs ./libs
 
 # Install dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Copy source code
-COPY src ./src
+RUN npm ci --legacy-peer-deps
 
 # Build TypeScript
-RUN npm install -g typescript && \
-    npm run build
+RUN npm run build -w services/api-gateway
 
-# Stage 2: Production
+# Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Install runtime dependencies
+RUN apk add --no-cache dumb-init curl
 
-# Copy built application
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+# Copy package files
+COPY package.json package-lock.json ./
 
-# Create logs directory
-RUN mkdir -p logs && chown nodejs:nodejs logs
+# Install production dependencies
+ENV HUSKY=0
+RUN npm ci --ignore-scripts --omit=dev --legacy-peer-deps
 
-# Switch to non-root user
-USER nodejs
+# Copy built application from builder
+COPY --from=builder /app/services/api-gateway/dist ./dist
 
-# Expose port
-EXPOSE 3000
+EXPOSE 3000 9229
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+ENTRYPOINT ["/sbin/dumb-init", "--"]
 
-# Start application
-CMD ["node", "dist/index.js"]
+# Run with Node inspect enabled for debugging
+CMD ["node", "--inspect=0.0.0.0:9229", "dist/index.js"]

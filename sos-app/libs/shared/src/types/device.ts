@@ -5,7 +5,7 @@
  */
 
 import type { UUID, Timestamp, Location } from './common';
-import type { VitalSigns, VitalAnalysis, BloodPressure } from './medical';
+import type { VitalSigns } from './medical';
 
 /**
  * Device types

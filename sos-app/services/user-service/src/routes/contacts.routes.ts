@@ -20,9 +20,9 @@ const createContactSchema = Joi.object({
   relationship: Joi.string()
     .valid(...Object.values(ContactRelationship))
     .required(),
-  priority: Joi.string()
+  priority: Joi.number()
     .valid(...Object.values(ContactPriority))
-    .default(ContactPriority.PRIMARY),
+    .default(ContactPriority.CRITICAL),
   address: Joi.string().max(500).optional(),
   notes: Joi.string().max(1000).optional(),
 });
@@ -34,7 +34,7 @@ const updateContactSchema = Joi.object({
   relationship: Joi.string()
     .valid(...Object.values(ContactRelationship))
     .optional(),
-  priority: Joi.string()
+  priority: Joi.number()
     .valid(...Object.values(ContactPriority))
     .optional(),
   address: Joi.string().max(500).optional().allow(null),
@@ -241,7 +241,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.userId!;
-      const priority = req.params.priority as ContactPriority;
+      const priority = parseInt(req.params.priority, 10) as ContactPriority;
 
       // Validate priority
       if (!Object.values(ContactPriority).includes(priority)) {

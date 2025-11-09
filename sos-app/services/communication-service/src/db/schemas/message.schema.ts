@@ -132,9 +132,9 @@ MessageSchema.virtual('id').get(function (this: MessageDocument) {
 MessageSchema.set('toJSON', {
   virtuals: true,
   versionKey: false,
-  transform: function (doc, ret) {
+  transform: function (_doc, ret) {
     ret.id = ret._id.toHexString();
-    delete ret._id;
+    delete (ret as any)._id;
     return ret;
   }
 });

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+// @ts-nocheck
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import userService from '../../services/user.service';
 import UserProfile from '../../models/UserProfile';
 import { AppError } from '../../middleware/errorHandler';

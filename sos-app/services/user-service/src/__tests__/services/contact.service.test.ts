@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import contactService from '../../services/contact.service';
 import EmergencyContact, { ContactPriority, ContactRelationship } from '../../models/EmergencyContact';

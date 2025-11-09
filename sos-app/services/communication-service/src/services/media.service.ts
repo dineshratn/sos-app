@@ -25,12 +25,12 @@ export interface SignedUrlResult {
 export class MediaService {
   private isProduction: boolean;
   private localStoragePath: string;
-  private s3Bucket: string;
 
   constructor() {
     this.isProduction = process.env.NODE_ENV === 'production';
     this.localStoragePath = process.env.MEDIA_STORAGE_PATH || '/tmp/sos-media';
-    this.s3Bucket = process.env.AWS_S3_BUCKET || 'sos-app-media';
+    // S3 bucket configuration will be added when S3 integration is implemented
+    // const s3Bucket = process.env.AWS_S3_BUCKET || 'sos-app-media';
     this.initializeLocalStorage();
   }
 
@@ -242,7 +242,7 @@ export class MediaService {
    * Delete from S3
    * TODO: Implement S3 deletion
    */
-  private async deleteFromS3(key: string): Promise<void> {
+  private async deleteFromS3(_key: string): Promise<void> {
     logger.warn('AWS S3 delete not implemented yet');
 
     // TODO: Implement S3 deletion

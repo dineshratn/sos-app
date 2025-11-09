@@ -52,7 +52,7 @@ export const configureGoogleStrategy = (): void => {
         scope: ['profile', 'email'],
         passReqToCallback: true,
       },
-      async (req, accessToken, refreshToken, profile, done) => {
+      async (_req, _accessToken, _refreshToken, profile, done) => {
         try {
           const userProfile = extractProfile(profile);
 

@@ -30,8 +30,15 @@ export enum ContactRelationship {
   OTHER = 'other',
 }
 
+export enum ContactPriority {
+  CRITICAL = 1,
+  HIGH = 2,
+  MEDIUM = 3,
+  LOW = 4,
+}
+
 export interface EmergencyContactAttributes {
-  id: string;
+  id?: string;
   userProfileId: string;
   name: string;
   relationship: ContactRelationship;
@@ -43,10 +50,10 @@ export interface EmergencyContactAttributes {
   state?: string;
   country?: string;
   postalCode?: string;
-  isPrimary: boolean;
-  priority: number;
+  isPrimary?: boolean;
+  priority?: number;
   notes?: string;
-  isActive: boolean;
+  isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date;
@@ -62,7 +69,7 @@ export default class EmergencyContact extends Model<EmergencyContactAttributes> 
   @PrimaryKey
   @Default(uuidv4)
   @Column(DataType.UUID)
-  id!: string;
+  declare id: string;
 
   @ForeignKey(() => UserProfile)
   @Index
@@ -132,15 +139,15 @@ export default class EmergencyContact extends Model<EmergencyContactAttributes> 
 
   @CreatedAt
   @Column(DataType.DATE)
-  createdAt!: Date;
+  declare createdAt: Date;
 
   @UpdatedAt
   @Column(DataType.DATE)
-  updatedAt!: Date;
+  declare updatedAt: Date;
 
   @DeletedAt
   @Column(DataType.DATE)
-  deletedAt?: Date;
+  declare deletedAt: Date | null;
 
   // Associations
   @BelongsTo(() => UserProfile)

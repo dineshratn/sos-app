@@ -53,6 +53,10 @@ export interface UserCreationAttributes {
   providerId?: string;
   firstName?: string;
   lastName?: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  mfaEnabled?: boolean;
+  mfaSecret?: string;
 }
 
 @Table({

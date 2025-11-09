@@ -32,7 +32,7 @@ declare global {
  */
 export const authenticateToken = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   try {
@@ -95,7 +95,7 @@ export const authenticateToken = (
  */
 export const optionalAuth = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   try {
@@ -146,5 +146,24 @@ export const extractUserId = (req: Request): string | null => {
     return decoded?.userId || null;
   } catch (error) {
     return null;
+  }
+};
+
+/**
+ * Verify JWT token directly (for non-middleware use like WebSocket)
+ * Returns the decoded token payload or throws an error
+ */
+export const verifyToken = (token: string): TokenPayload => {
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret) as TokenPayload;
+    return decoded;
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new AppError('Invalid token', 401, 'INVALID_TOKEN');
+    }
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new AppError('Token expired', 401, 'TOKEN_EXPIRED');
+    }
+    throw error;
   }
 };

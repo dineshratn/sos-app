@@ -166,7 +166,8 @@ export class RedisService {
   async isUserInRoom(emergencyId: string, userId: string): Promise<boolean> {
     try {
       const roomKey = `room:${emergencyId}:participants`;
-      return await this.client.sIsMember(roomKey, userId);
+      const isMember = await this.client.sIsMember(roomKey, userId);
+      return Boolean(isMember);
     } catch (error) {
       logger.error('Error checking if user is in room:', error);
       throw error;

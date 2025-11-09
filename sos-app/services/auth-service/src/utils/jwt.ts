@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import config from '../config';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -41,11 +41,13 @@ export const generateAccessToken = (
     type: 'access',
   };
 
-  const token = jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.accessTokenExpiry,
+  const options: SignOptions = {
+    expiresIn: config.jwt.accessTokenExpiry as any,
     issuer: config.serviceName,
     audience: 'sos-app',
-  });
+  };
+
+  const token = jwt.sign(payload, config.jwt.secret, options) as string;
 
   return token;
 };
@@ -69,12 +71,14 @@ export const generateRefreshToken = (
     type: 'refresh',
   };
 
-  const token = jwt.sign(payload, config.jwt.refreshSecret, {
-    expiresIn: config.jwt.refreshTokenExpiry,
+  const options: SignOptions = {
+    expiresIn: config.jwt.refreshTokenExpiry as any,
     issuer: config.serviceName,
     audience: 'sos-app',
     jwtid: uuidv4(), // Unique token ID for tracking
-  });
+  };
+
+  const token = jwt.sign(payload, config.jwt.refreshSecret, options) as string;
 
   return token;
 };

@@ -91,13 +91,13 @@ class APNsProvider {
       };
 
       // iOS 15+ interruption level
-      notification.interruption = 'critical';
+      (notification as any).interruption = 'critical';
 
       // Badge
       notification.badge = 1;
 
       // Category for action buttons
-      notification.category = 'EMERGENCY_ALERT';
+      (notification as any).category = 'EMERGENCY_ALERT';
 
       // Payload data
       notification.payload = {
@@ -176,7 +176,7 @@ class APNsProvider {
   /**
    * Send to multiple tokens
    */
-  async sendMultiple(tokens: string[], job: NotificationJob): Promise<apn.Responses> {
+  async sendMultiple(tokens: string[], job: NotificationJob): Promise<apn.Responses<any, any>> {
     if (!this.initialized || !this.provider) {
       throw new Error('APNs provider not initialized');
     }
@@ -191,7 +191,7 @@ class APNsProvider {
       name: 'emergency.caf',
       volume: 1.0,
     };
-    notification.interruption = 'critical';
+    (notification as any).interruption = 'critical';
     notification.badge = 1;
     notification.payload = {
       emergencyId: job.emergencyId,

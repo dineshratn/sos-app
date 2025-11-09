@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import EmergencyContact from './EmergencyContact';
 
 export interface UserProfileAttributes {
-  id: string;
+  id?: string;
   userId: string; // References user in auth service
   firstName?: string;
   lastName?: string;
@@ -33,7 +33,8 @@ export interface UserProfileAttributes {
   medications?: string;
   emergencyNotes?: string;
   profilePictureUrl?: string;
-  isActive: boolean;
+  notificationPreferences?: Record<string, any>;
+  isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date;
@@ -49,7 +50,7 @@ export default class UserProfile extends Model<UserProfileAttributes> {
   @PrimaryKey
   @Default(uuidv4)
   @Column(DataType.UUID)
-  id!: string;
+  declare id: string;
 
   @Index
   @Column({
@@ -108,21 +109,24 @@ export default class UserProfile extends Model<UserProfileAttributes> {
   @Column(DataType.STRING(500))
   profilePictureUrl?: string;
 
+  @Column(DataType.JSONB)
+  notificationPreferences?: Record<string, any>;
+
   @Default(true)
   @Column(DataType.BOOLEAN)
   isActive!: boolean;
 
   @CreatedAt
   @Column(DataType.DATE)
-  createdAt!: Date;
+  declare createdAt: Date;
 
   @UpdatedAt
   @Column(DataType.DATE)
-  updatedAt!: Date;
+  declare updatedAt: Date;
 
   @DeletedAt
   @Column(DataType.DATE)
-  deletedAt?: Date;
+  declare deletedAt: Date | null;
 
   // Associations
   @HasMany(() => EmergencyContact)

@@ -44,7 +44,6 @@ export class VoiceToTextService {
   ): Promise<TranscriptionResult> {
     try {
       const languageCode = options.languageCode || 'en-US';
-      const model = options.model || 'default';
 
       logger.info(`Transcribing audio (${audioBuffer.length} bytes) with language: ${languageCode}`);
 

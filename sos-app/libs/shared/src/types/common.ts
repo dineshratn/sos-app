@@ -248,20 +248,6 @@ export interface Duration {
 }
 
 /**
- * Geofence definition
- */
-export interface Geofence {
-  /** Geofence ID */
-  id: UUID;
-  /** Center location */
-  center: Location;
-  /** Radius in meters */
-  radius: number;
-  /** Geofence name */
-  name?: string;
-}
-
-/**
  * File upload metadata
  */
 export interface FileMetadata {

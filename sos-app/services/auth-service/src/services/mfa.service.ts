@@ -200,6 +200,29 @@ class MFAService {
       throw new AppError('Failed to disable MFA', 500, 'MFA_DISABLE_ERROR');
     }
   }
+
+  /**
+   * Get MFA status for a user
+   */
+  public async getMFAStatus(userId: string): Promise<{ mfaEnabled: boolean }> {
+    try {
+      const user = await User.findByPk(userId);
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      return {
+        mfaEnabled: user.mfaEnabled || false,
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('MFA status check error:', error);
+      throw new AppError('Failed to check MFA status', 500, 'MFA_STATUS_ERROR');
+    }
+  }
 }
 
 export default new MFAService();

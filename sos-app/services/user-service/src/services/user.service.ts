@@ -108,8 +108,14 @@ class UserService {
         throw new AppError('User profile already exists', 409, 'PROFILE_EXISTS');
       }
 
+      // Convert dateOfBirth from string to Date if provided
+      const createData: any = { ...data };
+      if (data.dateOfBirth) {
+        createData.dateOfBirth = new Date(data.dateOfBirth);
+      }
+
       // Create new profile
-      const profile = await UserProfile.create(data);
+      const profile = await UserProfile.create(createData);
 
       logger.info(`Created user profile: ${profile.id} for user: ${data.userId}`);
       return profile;
@@ -132,8 +138,14 @@ class UserService {
     try {
       const profile = await this.getUserProfile(userId);
 
+      // Convert dateOfBirth from string to Date if provided
+      const updateData: any = { ...updates };
+      if (updates.dateOfBirth) {
+        updateData.dateOfBirth = new Date(updates.dateOfBirth);
+      }
+
       // Update profile fields
-      await profile.update(updates);
+      await profile.update(updateData);
 
       logger.info(`Updated user profile: ${profile.id} for user: ${userId}`);
       return profile;

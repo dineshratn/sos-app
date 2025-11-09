@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import httpClient from '../utils/httpClient';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authRateLimiter } from '../middleware/rateLimiter';
-import { optionalAuth } from '../middleware/authMiddleware';
 import logger from '../utils/logger';
 
 const router = Router();

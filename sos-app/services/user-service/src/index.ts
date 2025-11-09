@@ -42,7 +42,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging middleware
-app.use((req: Request, res: Response, next) => {
+app.use((req: Request, _res: Response, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
     userAgent: req.get('user-agent'),
@@ -51,7 +51,7 @@ app.use((req: Request, res: Response, next) => {
 });
 
 // Health check endpoints
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: config.serviceName,
@@ -61,7 +61,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-app.get('/health/startup', (req: Request, res: Response) => {
+app.get('/health/startup', (_req: Request, res: Response) => {
   res.json({
     status: 'started',
     service: config.serviceName,
@@ -69,7 +69,7 @@ app.get('/health/startup', (req: Request, res: Response) => {
   });
 });
 
-app.get('/health/ready', async (req: Request, res: Response) => {
+app.get('/health/ready', async (_req: Request, res: Response) => {
   try {
     // Check database connection
     await connectDatabase();
@@ -88,7 +88,7 @@ app.get('/health/ready', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/health/live', (req: Request, res: Response) => {
+app.get('/health/live', (_req: Request, res: Response) => {
   res.json({
     status: 'alive',
     service: config.serviceName,
@@ -97,7 +97,7 @@ app.get('/health/live', (req: Request, res: Response) => {
 });
 
 // Root endpoint
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({
     service: config.serviceName,
     version: '1.0.0',

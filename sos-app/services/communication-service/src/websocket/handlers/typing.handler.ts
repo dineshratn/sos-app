@@ -9,12 +9,11 @@ import { TypingEvent } from '../../models/Message';
 import logger from '../../utils/logger';
 
 export class TypingHandler {
-  private io: Server;
   private typingTimers: Map<string, NodeJS.Timeout>; // Key: userId:emergencyId
   private readonly TYPING_TIMEOUT = 3000; // 3 seconds
 
-  constructor(io: Server) {
-    this.io = io;
+  constructor(_io: Server) {
+    // io parameter reserved for future use
     this.typingTimers = new Map();
   }
 

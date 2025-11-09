@@ -294,7 +294,7 @@ class MedicalService {
       const allergy = await MedicalAllergy.create({
         medicalProfileId: profile.id,
         ...allergyData,
-      });
+      } as any);
 
       logger.info(`Added allergy to profile: ${profile.id}`);
       return allergy;
@@ -321,7 +321,7 @@ class MedicalService {
       const medication = await MedicalMedication.create({
         medicalProfileId: profile.id,
         ...medicationData,
-      });
+      } as any);
 
       logger.info(`Added medication to profile: ${profile.id}`);
       return medication;
@@ -348,7 +348,7 @@ class MedicalService {
       const condition = await MedicalCondition.create({
         medicalProfileId: profile.id,
         ...conditionData,
-      });
+      } as any);
 
       logger.info(`Added condition to profile: ${profile.id}`);
       return condition;

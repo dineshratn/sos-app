@@ -4,7 +4,7 @@
  * Requirement 8.0.1: Communication During Emergencies
  */
 
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import {
   Participant,
   ParticipantRole,
@@ -19,10 +19,8 @@ import { AuthenticatedSocket, authorizeEmergencyAccess } from '../middleware/aut
 import logger from '../utils/logger';
 
 export class RoomHandler {
-  private io: Server;
-
-  constructor(io: Server) {
-    this.io = io;
+  constructor(_io: Server) {
+    // io parameter reserved for future use
   }
 
   /**
@@ -275,7 +273,7 @@ export class RoomHandler {
    * Get online participants in a room
    */
   async handleGetOnlineParticipants(
-    socket: AuthenticatedSocket,
+    _socket: AuthenticatedSocket,
     data: { emergencyId: string },
     callback: (response: { success: boolean; participants?: Participant[]; message?: string }) => void
   ): Promise<void> {

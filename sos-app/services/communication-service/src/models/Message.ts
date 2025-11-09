@@ -5,7 +5,7 @@
  */
 
 export interface Message {
-  id: string;
+  id?: string;
   emergencyId: string;
   senderId: string;
   senderRole: SenderRole;

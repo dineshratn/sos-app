@@ -1,51 +1,50 @@
-# Multi-stage build for Emergency Service
+# Multi-stage build for Go service with debug support
+FROM golang:1.24-alpine AS builder
 
-# Stage 1: Build
-FROM golang:1.21-alpine AS builder
+WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-cache git gcc musl-dev
+RUN apk add --no-cache git make
 
-# Set working directory
-WORKDIR /app
+# Copy go mod files (go.sum may not exist yet)
+COPY services/emergency-service/go.* ./
 
-# Copy go mod files
-COPY go.mod ./
-COPY go.sum* ./
-
-# Download dependencies
-RUN go mod download
+# Download dependencies and create go.sum if missing
+RUN go mod tidy
 
 # Copy source code
-COPY . .
+COPY services/emergency-service/ .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o emergency-service main.go
+# Build with debug symbols (dlv)
+RUN CGO_ENABLED=0 GOOS=linux go build -v -mod=mod -o app .
 
-# Stage 2: Runtime
-FROM alpine:latest
+# Debug stage for development
+FROM golang:1.24-alpine AS debug
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates
-
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
-
-# Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/emergency-service .
+# Install delve debugger
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
-# Change ownership
-RUN chown -R appuser:appuser /app
+# Copy built binary from builder
+COPY --from=builder /app/app /app/app
 
-# Switch to non-root user
-USER appuser
+EXPOSE 3000 40000
 
-# Expose port
-EXPOSE 8080
+# Run with delve debugger
+CMD ["dlv", "exec", "/app/app", "--headless", "--listen=0.0.0.0:40000", "--api-version=2"]
 
-# Run the application
-CMD ["./emergency-service"]
+# Production stage (doesn't include debugger)
+FROM alpine:latest AS production
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates curl
+
+# Copy built application
+COPY --from=builder /app/app /app/app
+
+EXPOSE 3000
+
+CMD ["/app/app"]

@@ -59,15 +59,15 @@ if (config.nodeEnv === 'development') {
 }
 
 // Request ID and logging middleware
-app.use((req: Request, res: Response, next) => {
-  const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  req.headers['x-request-id'] = requestId as string;
+app.use((_req: Request, _res: Response, next) => {
+  const requestId = _req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  _req.headers['x-request-id'] = requestId as string;
 
-  logger.info(`${req.method} ${req.path}`, {
+  logger.info(`${_req.method} ${_req.path}`, {
     requestId,
-    ip: req.ip,
-    userAgent: req.get('user-agent'),
-    userId: (req as any).user?.userId,
+    ip: _req.ip,
+    userAgent: _req.get('user-agent'),
+    userId: (_req as any).user?.userId,
   });
 
   next();
@@ -79,7 +79,7 @@ app.use('/api/', globalRateLimiter);
 
 // ==================== Health Check Endpoints ====================
 
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
     service: config.serviceName,
@@ -89,7 +89,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-app.get('/health/startup', (req: Request, res: Response) => {
+app.get('/health/startup', (_req: Request, res: Response) => {
   res.json({
     status: 'started',
     service: config.serviceName,
@@ -97,7 +97,7 @@ app.get('/health/startup', (req: Request, res: Response) => {
   });
 });
 
-app.get('/health/ready', async (req: Request, res: Response) => {
+app.get('/health/ready', async (_req: Request, res: Response) => {
   try {
     // Check if all services are reachable (simple ping)
     const serviceChecks = await Promise.allSettled([
@@ -137,7 +137,7 @@ app.get('/health/ready', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/health/live', (req: Request, res: Response) => {
+app.get('/health/live', (_req: Request, res: Response) => {
   res.json({
     status: 'alive',
     service: config.serviceName,
@@ -146,7 +146,7 @@ app.get('/health/live', (req: Request, res: Response) => {
 });
 
 // Circuit breaker status endpoint
-app.get('/health/circuit-breakers', (req: Request, res: Response) => {
+app.get('/health/circuit-breakers', (_req: Request, res: Response) => {
   const states = httpClient.getAllCircuitBreakerStates();
 
   res.json({
@@ -157,7 +157,7 @@ app.get('/health/circuit-breakers', (req: Request, res: Response) => {
 
 // ==================== Root Endpoint ====================
 
-app.get('/', (req: Request, res: Response) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({
     service: config.serviceName,
     version: '1.0.0',
@@ -211,10 +211,6 @@ const gracefulShutdown = async (signal: string) => {
   logger.info(`${signal} received, starting graceful shutdown...`);
 
   try {
-    // Close Redis connection
-    const { redisClient } = await import('./middleware/rateLimiter');
-    await redisClient.quit();
-
     logger.info('All connections closed. Exiting process.');
     process.exit(0);
   } catch (error) {
