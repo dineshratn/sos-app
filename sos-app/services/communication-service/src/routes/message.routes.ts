@@ -113,7 +113,7 @@ router.get(
       return res.status(200).json(response);
     } catch (error) {
       logger.error('Error retrieving message history:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         messages: [],
         total: 0,
@@ -214,7 +214,7 @@ router.post(
       return res.status(200).json(response);
     } catch (error) {
       logger.error('Error syncing offline messages:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         syncedMessages: [],
         failedMessages: [],

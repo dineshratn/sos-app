@@ -25,12 +25,12 @@ export interface SignedUrlResult {
 export class MediaService {
   private isProduction: boolean;
   private localStoragePath: string;
-  private s3Bucket: string;
 
   constructor() {
     this.isProduction = process.env.NODE_ENV === 'production';
     this.localStoragePath = process.env.MEDIA_STORAGE_PATH || '/tmp/sos-media';
-    this.s3Bucket = process.env.AWS_S3_BUCKET || 'sos-app-media';
+    // S3 bucket configuration will be added when S3 integration is implemented
+    // const s3Bucket = process.env.AWS_S3_BUCKET || 'sos-app-media';
     this.initializeLocalStorage();
   }
 
@@ -114,8 +114,6 @@ export class MediaService {
     mimeType: string,
     emergencyId: string
   ): Promise<UploadResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 upload not implemented yet, falling back to local storage');
 
     // TODO: Implement AWS S3 upload
@@ -185,8 +183,6 @@ export class MediaService {
     key: string,
     expiresIn: number
   ): Promise<SignedUrlResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 signed URL generation not implemented yet');
 
     // TODO: Implement S3 signed URL
@@ -247,8 +243,6 @@ export class MediaService {
    * TODO: Implement S3 deletion
    */
   private async deleteFromS3(_key: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _s3Bucket = this.s3Bucket;
     logger.warn('AWS S3 delete not implemented yet');
 
     // TODO: Implement S3 deletion

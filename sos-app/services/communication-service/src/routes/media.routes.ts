@@ -21,7 +21,7 @@ const upload = multer({
   limits: {
     fileSize: 50 * 1024 * 1024 // 50MB max file size
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (_req, file, cb) => {
     const validation = mediaService.validateMedia(file.mimetype, file.size);
     if (validation.valid) {
       cb(null, true);

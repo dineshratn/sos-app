@@ -134,8 +134,7 @@ MessageSchema.set('toJSON', {
   versionKey: false,
   transform: function (_doc, ret) {
     ret.id = ret._id.toHexString();
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-    delete ret._id;
+    delete (ret as any)._id;
     return ret;
   }
 });
