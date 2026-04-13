@@ -57,6 +57,17 @@ export const validateToken = async (
       req.userId = decoded.userId;
       req.sessionId = decoded.sessionId;
 
+      // Reject MFA-pending tokens for regular endpoints
+      // MFA-pending tokens should only be used for the /mfa/challenge endpoint
+      if (decoded.sessionId === 'mfa-pending' && req.path !== '/mfa/challenge') {
+        res.status(403).json({
+          success: false,
+          error: 'MFA verification required. Complete MFA challenge before accessing this resource.',
+          code: 'MFA_REQUIRED',
+        });
+        return;
+      }
+
       logger.debug(`Token validated for user: ${decoded.userId}`);
       next();
     } catch (error) {
@@ -109,6 +120,12 @@ export const optionalAuth = async (
     if (parts.length === 2 && parts[0] === 'Bearer') {
       const token = parts[1];
       const decoded = verifyAccessToken(token);
+
+      // Skip MFA-pending tokens - user hasn't completed authentication
+      if (decoded.sessionId === 'mfa-pending') {
+        next();
+        return;
+      }
 
       req.tokenPayload = decoded;
       req.userId = decoded.userId;

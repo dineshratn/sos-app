@@ -20,6 +20,7 @@ import {
 import config from '../config';
 import logger from '../utils/logger';
 import { generateTokenPair } from '../utils/jwt';
+import redisService from '../services/redis.service';
 
 const router = Router();
 
@@ -94,7 +95,12 @@ router.post(
 
       const result = await authService.login(data, deviceInfo);
 
-      logger.info(`User logged in successfully: ${data.email || data.phoneNumber}`);
+      // Check if MFA is required - don't log as full login
+      if ('mfaRequired' in result && result.mfaRequired) {
+        logger.info(`MFA required for user: ${data.email || data.phoneNumber}`);
+      } else {
+        logger.info(`User logged in successfully: ${data.email || data.phoneNumber}`);
+      }
 
       res.status(200).json(result);
     } catch (error) {
@@ -285,7 +291,7 @@ router.post(
 /**
  * @route   POST /api/v1/auth/mfa/challenge
  * @desc    Verify MFA code during login - issues tokens after successful verification
- * @access  Private (requires valid access token from partial login)
+ * @access  Private (requires valid MFA-pending access token from login)
  */
 router.post(
   '/mfa/challenge',
@@ -293,7 +299,28 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.userId!;
+      const sessionId = req.sessionId;
       const { token, deviceId, deviceName, deviceType } = req.body;
+
+      // Validate required fields
+      if (!deviceId) {
+        res.status(400).json({
+          success: false,
+          error: 'Device ID is required for MFA challenge',
+          code: 'DEVICE_ID_REQUIRED',
+        });
+        return;
+      }
+
+      // Verify this is an MFA-pending token (issued during login for MFA users)
+      if (sessionId !== 'mfa-pending') {
+        res.status(403).json({
+          success: false,
+          error: 'Invalid token for MFA challenge. Please login again.',
+          code: 'INVALID_MFA_FLOW',
+        });
+        return;
+      }
 
       if (!token) {
         res.status(400).json({
@@ -339,15 +366,59 @@ router.post(
         },
       });
 
-      const tokens = generateTokenPair(user.id, user.email, session?.id || '');
-
       if (session && session.isValid()) {
-        // Update existing session
+        // Update existing session - generate tokens with real session ID
+        const tokens = generateTokenPair(user.id, user.email, session.id);
         session.refreshToken = tokens.refreshToken;
         session.updateLastActive();
         await session.save();
+
+        // Cache session in Redis
+        await redisService.cacheSession(
+          session.id,
+          { userId: user.id, email: user.email },
+          config.session.timeoutHours * 3600
+        );
+
+        // Update last login
+        user.updateLastLogin();
+        await user.save();
+
+        logger.info(`MFA challenge successful for user: ${userId}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'MFA verification successful',
+          user: user.toSafeObject(),
+          tokens: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            tokenType: 'Bearer',
+          },
+          session: session.toSafeObject(),
+        });
       } else {
-        // Create new session
+        // Check session limit
+        const sessionCount = await Session.count({
+          where: { userId },
+        });
+
+        if (sessionCount >= config.session.maxSessionsPerUser) {
+          // Delete oldest session
+          const oldestSession = await Session.findOne({
+            where: { userId },
+            order: [['createdAt', 'ASC']],
+          });
+
+          if (oldestSession) {
+            await redisService.deleteSession(oldestSession.id);
+            await oldestSession.destroy();
+          }
+        }
+
+        // Create new session with temporary tokens (empty session ID)
+        const tempTokens = generateTokenPair(user.id, user.email, '');
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + config.session.timeoutHours);
 
@@ -356,31 +427,45 @@ router.post(
           deviceId: deviceId || 'unknown',
           deviceName,
           deviceType,
-          refreshToken: tokens.refreshToken,
+          refreshToken: tempTokens.refreshToken,
           ipAddress: req.ip || req.socket.remoteAddress,
           userAgent: req.get('user-agent'),
           expiresAt,
         });
+
+        // Regenerate tokens with the real session ID
+        const tokens = generateTokenPair(user.id, user.email, session.id);
+
+        // Update session with the real refresh token
+        session.refreshToken = tokens.refreshToken;
+        await session.save();
+
+        // Cache session in Redis
+        await redisService.cacheSession(
+          session.id,
+          { userId: user.id, email: user.email },
+          config.session.timeoutHours * 3600
+        );
+
+        // Update last login
+        user.updateLastLogin();
+        await user.save();
+
+        logger.info(`MFA challenge successful for user: ${userId}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'MFA verification successful',
+          user: user.toSafeObject(),
+          tokens: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            tokenType: 'Bearer',
+          },
+          session: session.toSafeObject(),
+        });
       }
-
-      // Update last login
-      user.updateLastLogin();
-      await user.save();
-
-      logger.info(`MFA challenge successful for user: ${userId}`);
-
-      res.status(200).json({
-        success: true,
-        message: 'MFA verification successful',
-        user: user.toSafeObject(),
-        tokens: {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresIn: tokens.expiresIn,
-          tokenType: 'Bearer',
-        },
-        session: session.toSafeObject(),
-      });
     } catch (error) {
       next(error);
     }

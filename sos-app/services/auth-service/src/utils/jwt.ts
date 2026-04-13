@@ -32,7 +32,8 @@ export interface TokenPair {
 export const generateAccessToken = (
   userId: string,
   email: string,
-  sessionId?: string
+  sessionId?: string,
+  expiresIn?: string
 ): string => {
   const payload: TokenPayload = {
     userId,
@@ -42,7 +43,7 @@ export const generateAccessToken = (
   };
 
   const options: SignOptions = {
-    expiresIn: config.jwt.accessTokenExpiry as any,
+    expiresIn: (expiresIn || config.jwt.accessTokenExpiry) as any,
     issuer: config.serviceName,
     audience: 'sos-app',
   };
