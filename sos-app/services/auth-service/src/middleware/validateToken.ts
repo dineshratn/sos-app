@@ -57,6 +57,17 @@ export const validateToken = async (
       req.userId = decoded.userId;
       req.sessionId = decoded.sessionId;
 
+      // Reject MFA-pending tokens for regular endpoints
+      // MFA-pending tokens should only be used for the /mfa/challenge endpoint
+      if (decoded.sessionId === 'mfa-pending' && !req.path.includes('/mfa/challenge')) {
+        res.status(403).json({
+          success: false,
+          error: 'MFA verification required. Complete MFA challenge before accessing this resource.',
+          code: 'MFA_REQUIRED',
+        });
+        return;
+      }
+
       logger.debug(`Token validated for user: ${decoded.userId}`);
       next();
     } catch (error) {

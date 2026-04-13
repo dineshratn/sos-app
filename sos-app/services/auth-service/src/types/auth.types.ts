@@ -50,6 +50,8 @@ export interface LogoutRequest {
 export interface AuthResponse {
   success: boolean;
   message: string;
+  mfaRequired?: boolean;
+  mfaToken?: string;
   user: Partial<UserAttributes>;
   tokens: {
     accessToken: string;
@@ -58,6 +60,21 @@ export interface AuthResponse {
     tokenType: string;
   };
   session: Partial<SessionAttributes>;
+}
+
+/**
+ * MFA Required Response DTO
+ * Returned when login credentials are valid but MFA verification is needed
+ */
+export interface MFARequiredResponse {
+  success: boolean;
+  message: string;
+  mfaRequired: true;
+  mfaToken: string;
+  user: {
+    id: string;
+    email: string;
+  };
 }
 
 /**

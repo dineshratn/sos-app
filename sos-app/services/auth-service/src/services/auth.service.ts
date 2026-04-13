@@ -11,10 +11,12 @@ import {
   RefreshTokenRequest,
   LogoutRequest,
   AuthResponse,
+  MFARequiredResponse,
   LogoutResponse,
   DeviceInfo,
 } from '../types/auth.types';
 import { AppError } from '../middleware/errorHandler';
+import { generateAccessToken } from '../utils/jwt';
 import crypto from 'crypto';
 
 class AuthService {
@@ -101,7 +103,7 @@ class AuthService {
   /**
    * Login with email/password
    */
-  public async login(data: LoginRequest, deviceInfo: DeviceInfo): Promise<AuthResponse> {
+  public async login(data: LoginRequest, deviceInfo: DeviceInfo): Promise<AuthResponse | MFARequiredResponse> {
     try {
       // Validate input - must provide either email or phone
       if (!data.email && !data.phoneNumber) {
@@ -170,6 +172,27 @@ class AuthService {
 
       // Reset Redis counter
       await redisService.resetFailedLogin(identifier!);
+
+      // Check if MFA is enabled - if so, return a limited response
+      // requiring MFA verification before issuing full tokens
+      if (user.mfaEnabled && user.mfaSecret) {
+        // Generate a short-lived MFA-pending token (5 minutes)
+        // This token can only be used for the /mfa/challenge endpoint
+        const mfaToken = generateAccessToken(user.id, user.email, 'mfa-pending');
+
+        logger.info(`MFA required for user: ${user.id} (${user.email})`);
+
+        return {
+          success: true,
+          message: 'MFA verification required',
+          mfaRequired: true,
+          mfaToken,
+          user: {
+            id: user.id,
+            email: user.email,
+          },
+        };
+      }
 
       // Check for existing session on this device
       const existingSession = await Session.findOne({

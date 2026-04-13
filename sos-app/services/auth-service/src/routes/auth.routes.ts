@@ -94,7 +94,12 @@ router.post(
 
       const result = await authService.login(data, deviceInfo);
 
-      logger.info(`User logged in successfully: ${data.email || data.phoneNumber}`);
+      // Check if MFA is required - don't log as full login
+      if ('mfaRequired' in result && result.mfaRequired) {
+        logger.info(`MFA required for user: ${data.email || data.phoneNumber}`);
+      } else {
+        logger.info(`User logged in successfully: ${data.email || data.phoneNumber}`);
+      }
 
       res.status(200).json(result);
     } catch (error) {
@@ -285,7 +290,7 @@ router.post(
 /**
  * @route   POST /api/v1/auth/mfa/challenge
  * @desc    Verify MFA code during login - issues tokens after successful verification
- * @access  Private (requires valid access token from partial login)
+ * @access  Private (requires valid MFA-pending access token from login)
  */
 router.post(
   '/mfa/challenge',
@@ -293,7 +298,18 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.userId!;
+      const sessionId = req.sessionId;
       const { token, deviceId, deviceName, deviceType } = req.body;
+
+      // Verify this is an MFA-pending token (issued during login for MFA users)
+      if (sessionId !== 'mfa-pending') {
+        res.status(403).json({
+          success: false,
+          error: 'Invalid token for MFA challenge. Please login again.',
+          code: 'INVALID_MFA_FLOW',
+        });
+        return;
+      }
 
       if (!token) {
         res.status(400).json({
