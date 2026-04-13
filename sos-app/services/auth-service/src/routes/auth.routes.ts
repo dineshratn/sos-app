@@ -389,7 +389,26 @@ router.post(
           session: session.toSafeObject(),
         });
       } else {
-        // Create new session first with a temporary refresh token
+        // Check session limit
+        const sessionCount = await Session.count({
+          where: { userId },
+        });
+
+        if (sessionCount >= config.session.maxSessionsPerUser) {
+          // Delete oldest session
+          const oldestSession = await Session.findOne({
+            where: { userId },
+            order: [['createdAt', 'ASC']],
+          });
+
+          if (oldestSession) {
+            await redisService.deleteSession(oldestSession.id);
+            await oldestSession.destroy();
+          }
+        }
+
+        // Create new session with temporary tokens (empty session ID)
+        const tempTokens = generateTokenPair(user.id, user.email, '');
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + config.session.timeoutHours);
 
@@ -398,13 +417,13 @@ router.post(
           deviceId: deviceId || 'unknown',
           deviceName,
           deviceType,
-          refreshToken: 'pending', // Temporary, will be replaced below
+          refreshToken: tempTokens.refreshToken,
           ipAddress: req.ip || req.socket.remoteAddress,
           userAgent: req.get('user-agent'),
           expiresAt,
         });
 
-        // Now generate tokens with the real session ID
+        // Regenerate tokens with the real session ID
         const tokens = generateTokenPair(user.id, user.email, session.id);
 
         // Update session with the real refresh token
