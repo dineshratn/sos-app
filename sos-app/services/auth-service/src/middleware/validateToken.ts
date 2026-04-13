@@ -121,6 +121,12 @@ export const optionalAuth = async (
       const token = parts[1];
       const decoded = verifyAccessToken(token);
 
+      // Skip MFA-pending tokens - user hasn't completed authentication
+      if (decoded.sessionId === 'mfa-pending') {
+        next();
+        return;
+      }
+
       req.tokenPayload = decoded;
       req.userId = decoded.userId;
       req.sessionId = decoded.sessionId;

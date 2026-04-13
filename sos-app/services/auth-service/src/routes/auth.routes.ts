@@ -20,6 +20,7 @@ import {
 import config from '../config';
 import logger from '../utils/logger';
 import { generateTokenPair } from '../utils/jwt';
+import redisService from '../services/redis.service';
 
 const router = Router();
 
@@ -362,6 +363,13 @@ router.post(
         session.updateLastActive();
         await session.save();
 
+        // Cache session in Redis
+        await redisService.cacheSession(
+          session.id,
+          { userId: user.id, email: user.email },
+          config.session.timeoutHours * 3600
+        );
+
         // Update last login
         user.updateLastLogin();
         await user.save();
@@ -402,6 +410,13 @@ router.post(
         // Update session with the real refresh token
         session.refreshToken = tokens.refreshToken;
         await session.save();
+
+        // Cache session in Redis
+        await redisService.cacheSession(
+          session.id,
+          { userId: user.id, email: user.email },
+          config.session.timeoutHours * 3600
+        );
 
         // Update last login
         user.updateLastLogin();
