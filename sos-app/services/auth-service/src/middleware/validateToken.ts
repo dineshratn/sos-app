@@ -59,7 +59,7 @@ export const validateToken = async (
 
       // Reject MFA-pending tokens for regular endpoints
       // MFA-pending tokens should only be used for the /mfa/challenge endpoint
-      if (decoded.sessionId === 'mfa-pending' && !req.path.includes('/mfa/challenge')) {
+      if (decoded.sessionId === 'mfa-pending' && req.path !== '/mfa/challenge') {
         res.status(403).json({
           success: false,
           error: 'MFA verification required. Complete MFA challenge before accessing this resource.',
