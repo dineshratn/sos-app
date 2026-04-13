@@ -167,7 +167,6 @@ class AuthService {
 
       // Successful login - reset failed attempts
       user.resetFailedLoginAttempts();
-      user.updateLastLogin();
       await user.save();
 
       // Reset Redis counter
@@ -178,7 +177,7 @@ class AuthService {
       if (user.mfaEnabled && user.mfaSecret) {
         // Generate a short-lived MFA-pending token (5 minutes)
         // This token can only be used for the /mfa/challenge endpoint
-        const mfaToken = generateAccessToken(user.id, user.email, 'mfa-pending');
+        const mfaToken = generateAccessToken(user.id, user.email, 'mfa-pending', '5m');
 
         logger.info(`MFA required for user: ${user.id} (${user.email})`);
 
@@ -193,6 +192,10 @@ class AuthService {
           },
         };
       }
+
+      // Update last login only for non-MFA users (MFA users update after challenge)
+      user.updateLastLogin();
+      await user.save();
 
       // Check for existing session on this device
       const existingSession = await Session.findOne({

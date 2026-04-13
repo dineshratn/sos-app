@@ -355,15 +355,33 @@ router.post(
         },
       });
 
-      const tokens = generateTokenPair(user.id, user.email, session?.id || '');
-
       if (session && session.isValid()) {
-        // Update existing session
+        // Update existing session - generate tokens with real session ID
+        const tokens = generateTokenPair(user.id, user.email, session.id);
         session.refreshToken = tokens.refreshToken;
         session.updateLastActive();
         await session.save();
+
+        // Update last login
+        user.updateLastLogin();
+        await user.save();
+
+        logger.info(`MFA challenge successful for user: ${userId}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'MFA verification successful',
+          user: user.toSafeObject(),
+          tokens: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            tokenType: 'Bearer',
+          },
+          session: session.toSafeObject(),
+        });
       } else {
-        // Create new session
+        // Create new session first with a temporary refresh token
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + config.session.timeoutHours);
 
@@ -372,31 +390,38 @@ router.post(
           deviceId: deviceId || 'unknown',
           deviceName,
           deviceType,
-          refreshToken: tokens.refreshToken,
+          refreshToken: 'pending', // Temporary, will be replaced below
           ipAddress: req.ip || req.socket.remoteAddress,
           userAgent: req.get('user-agent'),
           expiresAt,
         });
+
+        // Now generate tokens with the real session ID
+        const tokens = generateTokenPair(user.id, user.email, session.id);
+
+        // Update session with the real refresh token
+        session.refreshToken = tokens.refreshToken;
+        await session.save();
+
+        // Update last login
+        user.updateLastLogin();
+        await user.save();
+
+        logger.info(`MFA challenge successful for user: ${userId}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'MFA verification successful',
+          user: user.toSafeObject(),
+          tokens: {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresIn: tokens.expiresIn,
+            tokenType: 'Bearer',
+          },
+          session: session.toSafeObject(),
+        });
       }
-
-      // Update last login
-      user.updateLastLogin();
-      await user.save();
-
-      logger.info(`MFA challenge successful for user: ${userId}`);
-
-      res.status(200).json({
-        success: true,
-        message: 'MFA verification successful',
-        user: user.toSafeObject(),
-        tokens: {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresIn: tokens.expiresIn,
-          tokenType: 'Bearer',
-        },
-        session: session.toSafeObject(),
-      });
     } catch (error) {
       next(error);
     }
