@@ -302,6 +302,16 @@ router.post(
       const sessionId = req.sessionId;
       const { token, deviceId, deviceName, deviceType } = req.body;
 
+      // Validate required fields
+      if (!deviceId) {
+        res.status(400).json({
+          success: false,
+          error: 'Device ID is required for MFA challenge',
+          code: 'DEVICE_ID_REQUIRED',
+        });
+        return;
+      }
+
       // Verify this is an MFA-pending token (issued during login for MFA users)
       if (sessionId !== 'mfa-pending') {
         res.status(403).json({
