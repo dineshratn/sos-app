@@ -50,7 +50,7 @@
     "@types/cors": "^2.8.17",
     "@types/speakeasy": "^2.0.10",
     "@types/qrcode": "^1.5.5",
-    "@types/uuid": "^9.0.7",
+    "@types/uuid": "^11.0.0",
     "@types/jest": "^29.5.11",
     "@types/supertest": "^6.0.3",
     "typescript": "^5.3.3",
