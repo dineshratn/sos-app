@@ -45,7 +45,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/passport": "^1.0.16",
     "@types/passport-google-oauth20": "^2.0.14",
-    "@types/passport-apple": "^1.0.3",
+    "@types/passport-apple": "^2.0.3",
     "@types/passport-jwt": "^4.0.1",
     "@types/cors": "^2.8.17",
     "@types/speakeasy": "^2.0.10",
